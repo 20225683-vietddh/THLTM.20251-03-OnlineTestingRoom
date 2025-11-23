@@ -1,0 +1,9 @@
+# Python dependencies for Network Programming Project
+
+# GUI Library
+customtkinter>=5.2.0
+
+# Required by customtkinter
+darkdetect>=0.8.0
+packaging>=23.0
+

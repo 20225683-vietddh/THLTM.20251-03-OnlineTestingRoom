@@ -1,0 +1,116 @@
+{
+  "duration": 10,
+  "questions": [
+    {
+      "id": 1,
+      "question": "What does TCP stand for?",
+      "options": [
+        "Transmission Control Protocol",
+        "Transfer Control Protocol",
+        "Transport Communication Protocol",
+        "Telecommunication Control Protocol"
+      ],
+      "answer": 0
+    },
+    {
+      "id": 2,
+      "question": "Which layer of the OSI model does IP protocol belong to?",
+      "options": [
+        "Application Layer",
+        "Transport Layer",
+        "Network Layer",
+        "Data Link Layer"
+      ],
+      "answer": 2
+    },
+    {
+      "id": 3,
+      "question": "What is the default port number for HTTP?",
+      "options": [
+        "21",
+        "80",
+        "443",
+        "8080"
+      ],
+      "answer": 1
+    },
+    {
+      "id": 4,
+      "question": "Which protocol is connectionless?",
+      "options": [
+        "TCP",
+        "HTTP",
+        "UDP",
+        "FTP"
+      ],
+      "answer": 2
+    },
+    {
+      "id": 5,
+      "question": "What does DNS stand for?",
+      "options": [
+        "Domain Name System",
+        "Dynamic Network Service",
+        "Data Network System",
+        "Domain Network Service"
+      ],
+      "answer": 0
+    },
+    {
+      "id": 6,
+      "question": "Which of the following is NOT a valid IP address class?",
+      "options": [
+        "Class A",
+        "Class B",
+        "Class E",
+        "Class F"
+      ],
+      "answer": 3
+    },
+    {
+      "id": 7,
+      "question": "What is the maximum size of a TCP segment?",
+      "options": [
+        "64 KB",
+        "128 KB",
+        "256 KB",
+        "512 KB"
+      ],
+      "answer": 0
+    },
+    {
+      "id": 8,
+      "question": "Which command is used to test network connectivity?",
+      "options": [
+        "netstat",
+        "ping",
+        "tracert",
+        "ipconfig"
+      ],
+      "answer": 1
+    },
+    {
+      "id": 9,
+      "question": "What is the purpose of ARP?",
+      "options": [
+        "Translate domain names to IP addresses",
+        "Translate IP addresses to MAC addresses",
+        "Route packets between networks",
+        "Encrypt network traffic"
+      ],
+      "answer": 1
+    },
+    {
+      "id": 10,
+      "question": "Which protocol is used for secure web browsing?",
+      "options": [
+        "HTTP",
+        "FTP",
+        "HTTPS",
+        "SMTP"
+      ],
+      "answer": 2
+    }
+  ]
+}
+
