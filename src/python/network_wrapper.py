@@ -116,7 +116,7 @@ class NetworkWrapper:
             raise RuntimeError("Failed to send message")
         return result
         
-    def receive_message(self, socket, buffer_size=1024):
+    def receive_message(self, socket, buffer_size=8192):
         """Receive a message from socket"""
         buffer = ctypes.create_string_buffer(buffer_size)
         result = self.lib.py_receive_message(socket, buffer, buffer_size)

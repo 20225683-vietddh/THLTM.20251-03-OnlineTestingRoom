@@ -200,9 +200,8 @@ class TestClient(ctk.CTk):
                 # Show test screen
                 self.show_test_screen()
                 
-                # Start timer thread
-                timer_thread = threading.Thread(target=self.update_timer, daemon=True)
-                timer_thread.start()
+                # Start timer update (from main thread)
+                self.after(1000, self.update_timer)
                 
         except Exception as e:
             print(f"Error starting test: {e}")
@@ -328,27 +327,30 @@ class TestClient(ctk.CTk):
             self.display_question()
             
     def update_timer(self):
-        """Update timer display"""
-        while self.timer_running:
-            elapsed = datetime.now() - self.start_time
-            remaining = timedelta(minutes=self.test_duration) - elapsed
+        """Update timer display (called from main thread using after())"""
+        if not self.timer_running:
+            return
             
-            if remaining.total_seconds() <= 0:
-                self.timer_running = False
-                self.timer_label.configure(text="Time's Up!", text_color="red")
-                self.submit_test()
-                break
-                
-            minutes = int(remaining.total_seconds() // 60)
-            seconds = int(remaining.total_seconds() % 60)
+        elapsed = datetime.now() - self.start_time
+        remaining = timedelta(minutes=self.test_duration) - elapsed
+        
+        if remaining.total_seconds() <= 0:
+            self.timer_running = False
+            self.timer_label.configure(text="Time's Up!", text_color="red")
+            self.submit_test()
+            return
             
-            color = "green" if minutes >= 5 else "orange" if minutes >= 2 else "red"
-            self.timer_label.configure(
-                text=f"Time Remaining: {minutes:02d}:{seconds:02d}",
-                text_color=color
-            )
-            
-            self.after(1000)  # Update every second
+        minutes = int(remaining.total_seconds() // 60)
+        seconds = int(remaining.total_seconds() % 60)
+        
+        color = "green" if minutes >= 5 else "orange" if minutes >= 2 else "red"
+        self.timer_label.configure(
+            text=f"Time Remaining: {minutes:02d}:{seconds:02d}",
+            text_color=color
+        )
+        
+        # Schedule next update (Tkinter-safe way)
+        self.after(1000, self.update_timer)
             
     def submit_test(self):
         """Submit test answers"""

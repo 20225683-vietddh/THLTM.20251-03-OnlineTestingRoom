@@ -165,27 +165,35 @@ class TestServer(ctk.CTk):
         self.log_display.pack(pady=5, padx=5, fill="both", expand=True)
         
     def append_log(self, message):
-        """Append message to log display"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.log_display.configure(state="normal")
-        self.log_display.insert("end", f"[{timestamp}] {message}\n")
-        self.log_display.configure(state="disabled")
-        self.log_display.see("end")
+        """Append message to log display (thread-safe)"""
+        def _append():
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            self.log_display.configure(state="normal")
+            self.log_display.insert("end", f"[{timestamp}] {message}\n")
+            self.log_display.configure(state="disabled")
+            self.log_display.see("end")
+        
+        # Schedule on main thread if called from worker thread
+        self.after(0, _append)
         
     def update_students_list(self):
-        """Update the connected students list"""
-        self.students_list.configure(state="normal")
-        self.students_list.delete("1.0", "end")
+        """Update the connected students list (thread-safe)"""
+        def _update():
+            self.students_list.configure(state="normal")
+            self.students_list.delete("1.0", "end")
+            
+            for socket, info in self.clients.items():
+                status_icon = "📝" if info["status"] == "testing" else "✅" if info["status"] == "completed" else "⏳"
+                self.students_list.insert("end", 
+                    f"{status_icon} {info['name']}\n"
+                    f"   Score: {info['score']}/{len(self.questions)}\n"
+                    f"   Status: {info['status']}\n\n"
+                )
+            
+            self.students_list.configure(state="disabled")
         
-        for socket, info in self.clients.items():
-            status_icon = "📝" if info["status"] == "testing" else "✅" if info["status"] == "completed" else "⏳"
-            self.students_list.insert("end", 
-                f"{status_icon} {info['name']}\n"
-                f"   Score: {info['score']}/{len(self.questions)}\n"
-                f"   Status: {info['status']}\n\n"
-            )
-        
-        self.students_list.configure(state="disabled")
+        # Schedule on main thread if called from worker thread
+        self.after(0, _update)
         
     def toggle_server(self):
         """Start or stop the server"""

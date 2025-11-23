@@ -95,7 +95,7 @@ Project/
 
 #### Windows:
 ```bash
-build.bat
+./build.bat
 ```
 
 #### Linux/macOS:
