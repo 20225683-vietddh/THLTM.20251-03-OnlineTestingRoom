@@ -18,7 +18,7 @@ def test_phase1():
     
     # Initialize components
     print("\n1. Initializing Database...")
-    db = Database("data/users.db")
+    db = Database("data/app.db")
     auth = AuthManager()
     session_mgr = SessionManager()
     print("   ✓ Database initialized")

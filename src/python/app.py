@@ -3,7 +3,16 @@ Main Application - Online Multiple Choice Test System
 Clean architecture with modular UI components
 """
 import customtkinter as ctk
-from network_wrapper import NetworkWrapper
+from protocol_wrapper import (
+    ProtocolWrapper,
+    MSG_REGISTER_REQ, MSG_REGISTER_RES,
+    MSG_LOGIN_REQ, MSG_LOGIN_RES,
+    MSG_TEST_CONFIG, MSG_TEST_START_REQ, MSG_TEST_START_RES,
+    MSG_TEST_QUESTIONS, MSG_TEST_SUBMIT, MSG_TEST_RESULT,
+    MSG_TEACHER_DATA_REQ, MSG_TEACHER_DATA_RES,
+    MSG_ERROR,
+    ERR_SUCCESS, ERR_INVALID_CREDS, ERR_USERNAME_EXISTS
+)
 from auth import AuthManager
 from ui import LoginWindow, RegisterWindow, StudentWindow, TeacherWindow
 import json
@@ -15,8 +24,8 @@ class TestApplication(ctk.CTk):
         super().__init__()
         
         # Initialize core components
-        self.network = NetworkWrapper()
-        self.network.init_network()
+        self.proto = ProtocolWrapper()
+        self.proto.init_network()
         self.auth = AuthManager()
         
         # Connection state
@@ -154,13 +163,10 @@ class TestApplication(ctk.CTk):
             if self.connected:
                 return True
             
-            print(f"Connecting to {self.server_host}:{self.server_port}...")
-            self.socket = self.network.connect_to_server(self.server_host, self.server_port)
+            self.socket = self.proto.connect_to_server(self.server_host, self.server_port)
             self.connected = True
-            print("✓ Connected successfully!")
             return True
         except Exception as e:
-            print(f"✗ Connection error: {str(e)}")
             return False
     
     def handle_login(self, username, password, role):
@@ -176,41 +182,53 @@ class TestApplication(ctk.CTk):
             return
         
         try:
-            # Send login request
-            login_data = json.dumps({
+            # Send login request with protocol
+            self.proto.send_message(self.socket, MSG_LOGIN_REQ, {
                 'username': username,
-                'password': password
-            })
-            self.network.send_message(self.socket, f"LOGIN:{role}:{login_data}")
+                'password': password,
+                'role': role
+            }, use_session=False)
             
             # Receive response
-            response = self.network.receive_message(self.socket)
+            response = self.proto.receive_message(self.socket)
             
-            if response.startswith("AUTH_SUCCESS"):
-                session_data = json.loads(response.split("AUTH_SUCCESS:")[1])
+            if response['message_type'] == MSG_LOGIN_RES:
+                payload = response['payload']
                 
-                # Store session
-                self.session_token = session_data['session_token']
-                self.user_id = session_data['user_id']
-                self.username = session_data['username']
-                self.role = session_data['role']
-                self.full_name = session_data['full_name']
-                
-                print(f"✓ Logged in as {self.username} ({self.role})")
-                
-                # Navigate based on role
-                if self.role == 'student':
-                    self.show_student_interface()
-                else:
-                    self.show_teacher_interface()
+                if payload['code'] == ERR_SUCCESS:
+                    session_data = payload['data']
                     
-            else:
-                error_data = json.loads(response.split("AUTH_FAILED:")[1])
+                    # Store session
+                    self.session_token = session_data['session_token']
+                    self.user_id = session_data['user_id']
+                    self.username = session_data['username']
+                    self.role = session_data['role']
+                    self.full_name = session_data['full_name']
+                    
+                    # Set session token in protocol wrapper
+                    self.proto.set_session_token(self.session_token)
+                    
+                    # Navigate based on role
+                    if self.role == 'student':
+                        self.show_student_interface()
+                    else:
+                        self.show_teacher_interface()
+                else:
+                    # Login failed
+                    error_msg = payload.get('message', 'Login failed')
+                    if self.login_window:
+                        self.login_window.show_status(f"✗ {error_msg}", "red")
+            elif response['message_type'] == MSG_ERROR:
+                # Server sent error
+                error_msg = response['payload'].get('message', 'Unknown error')
                 if self.login_window:
-                    self.login_window.show_status(f"✗ {error_data['error']}", "red")
+                    self.login_window.show_status(f"✗ {error_msg}", "red")
+            else:
+                # Unexpected message type
+                if self.login_window:
+                    self.login_window.show_status("✗ Unexpected response", "red")
                     
         except Exception as e:
-            print(f"✗ Login error: {str(e)}")
             if self.login_window:
                 self.login_window.show_status(f"✗ Error: {str(e)}", "red")
     
@@ -239,33 +257,35 @@ class TestApplication(ctk.CTk):
             return
         
         try:
-            # Send registration request
-            reg_data = json.dumps({
+            # Send registration request with protocol
+            self.proto.send_message(self.socket, MSG_REGISTER_REQ, {
                 'username': username,
                 'password': password,
                 'full_name': full_name,
-                'email': email
-            })
-            self.network.send_message(self.socket, f"REGISTER:{role}:{reg_data}")
+                'email': email,
+                'role': role
+            }, use_session=False)
             
             # Receive response
-            response = self.network.receive_message(self.socket)
+            response = self.proto.receive_message(self.socket)
             
-            if response.startswith("REGISTER_SUCCESS"):
-                if self.register_window:
-                    self.register_window.show_status(
-                        "✓ Registration successful! Please login.",
-                        "green"
-                    )
-                # Auto-switch to login after 2 seconds
-                self.after(2000, self.show_login)
-            else:
-                error_data = json.loads(response.split("REGISTER_FAILED:")[1])
-                if self.register_window:
-                    self.register_window.show_status(f"✗ {error_data['error']}", "red")
+            if response['message_type'] == MSG_REGISTER_RES:
+                payload = response['payload']
+                
+                if payload['code'] == ERR_SUCCESS:
+                    if self.register_window:
+                        self.register_window.show_status(
+                            "✓ Registration successful! Please login.",
+                            "green"
+                        )
+                    # Auto-switch to login after 2 seconds
+                    self.after(2000, self.show_login)
+                else:
+                    error_msg = payload.get('message', 'Registration failed')
+                    if self.register_window:
+                        self.register_window.show_status(f"✗ {error_msg}", "red")
                     
         except Exception as e:
-            print(f"✗ Registration error: {str(e)}")
             if self.register_window:
                 self.register_window.show_status(f"✗ Error: {str(e)}", "red")
     
@@ -273,11 +293,11 @@ class TestApplication(ctk.CTk):
     
     def show_student_interface(self):
         """Show student interface"""
-        # Receive config
+        # Receive config (auto-sent by server)
         try:
-            config_msg = self.network.receive_message(self.socket)
-            if config_msg.startswith("CONFIG:"):
-                config = json.loads(config_msg.split("CONFIG:")[1])
+            response = self.proto.receive_message(self.socket)
+            if response['message_type'] == MSG_TEST_CONFIG:
+                config = response['payload']
                 
                 # Create student window
                 self.student_window = StudentWindow(self.main_frame, {
@@ -292,19 +312,21 @@ class TestApplication(ctk.CTk):
                     duration=config['duration']
                 )
         except Exception as e:
-            print(f"✗ Error showing student interface: {str(e)}")
+            pass
     
     def handle_start_test(self):
         """Handle start test"""
         try:
-            # Request questions
-            self.network.send_message(self.socket, "START")
+            # Send start request
+            self.proto.send_message(self.socket, MSG_TEST_START_REQ, {'ready': True})
+            
+            # Receive start confirmation
+            response = self.proto.receive_message(self.socket)
             
             # Receive questions
-            questions_msg = self.network.receive_message(self.socket)
-            if questions_msg.startswith("QUESTIONS:"):
-                questions_data = json.loads(questions_msg.split("QUESTIONS:")[1])
-                questions = questions_data["questions"]
+            questions_response = self.proto.receive_message(self.socket)
+            if questions_response['message_type'] == MSG_TEST_QUESTIONS:
+                questions = questions_response['payload']['questions']
                 
                 # Show test screen
                 if self.student_window:
@@ -313,36 +335,42 @@ class TestApplication(ctk.CTk):
                     self.student_window.show_test_screen(questions, duration)
                     
         except Exception as e:
-            print(f"✗ Error starting test: {str(e)}")
+            pass
     
     def handle_submit_test(self, answers):
         """Handle submit test"""
         try:
-            # Send answers
-            answers_json = json.dumps(answers)
-            self.network.send_message(self.socket, f"ANSWERS:{answers_json}")
+            # Send answers with protocol
+            self.proto.send_message(self.socket, MSG_TEST_SUBMIT, {
+                'answers': answers,
+                'end_time': self.proto.lib.py_get_unix_timestamp()
+            })
             
             # Receive result
-            result_msg = self.network.receive_message(self.socket)
-            if result_msg.startswith("RESULT:"):
-                result = json.loads(result_msg.split("RESULT:")[1])
+            response = self.proto.receive_message(self.socket)
+            if response['message_type'] == MSG_TEST_RESULT:
+                result = response['payload']['data']
                 
                 # Show result
                 if self.student_window:
                     self.student_window.show_result_screen(result, self.full_name)
                     
         except Exception as e:
-            print(f"✗ Error submitting test: {str(e)}")
+            pass
     
     # ==================== TEACHER INTERFACE ====================
     
     def show_teacher_interface(self):
         """Show teacher interface"""
         try:
+            # Request teacher data (auto-sent by server, or request manually)
+            # Server should auto-send after login, but we can also request
+            # self.proto.send_message(self.socket, MSG_TEACHER_DATA_REQ, {})
+            
             # Receive teacher data
-            teacher_data_msg = self.network.receive_message(self.socket)
-            if teacher_data_msg.startswith("TEACHER_DATA:"):
-                data = json.loads(teacher_data_msg.split("TEACHER_DATA:")[1])
+            response = self.proto.receive_message(self.socket)
+            if response['message_type'] == MSG_TEACHER_DATA_RES:
+                data = response['payload']['data']
                 results = data.get("results", [])
                 
                 # Create teacher window
@@ -356,7 +384,7 @@ class TestApplication(ctk.CTk):
                     results=results
                 )
         except Exception as e:
-            print(f"✗ Error showing teacher interface: {str(e)}")
+            pass
     
     # ==================== CLEANUP ====================
     
@@ -366,10 +394,10 @@ class TestApplication(ctk.CTk):
             self.student_window.timer_running = False
         if self.connected and self.socket:
             try:
-                self.network.close_socket(self.socket)
+                self.proto.close_socket(self.socket)
             except:
                 pass
-        self.network.cleanup_network()
+        self.proto.cleanup_network()
         self.destroy()
 
 

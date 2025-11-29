@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 class Database:
-    def __init__(self, db_path="data/users.db"):
+    def __init__(self, db_path="data/app.db"):
         """Initialize database connection"""
         self.db_path = db_path
         

@@ -155,3 +155,134 @@ const char* get_last_error() {
 #endif
 }
 
+// ==================== PROTOCOL FUNCTIONS (New) ====================
+
+#include <time.h>
+
+// Generate simple message ID (16 bytes)
+void generate_message_id(char* message_id) {
+    // Simple implementation: timestamp + random counter
+    static int counter = 0;
+    time_t now = time(NULL);
+    
+    snprintf(message_id, 16, "%08x%08x", (unsigned int)now, counter++);
+    memset(message_id + strlen(message_id), 0, 16 - strlen(message_id));
+}
+
+// Get Unix timestamp
+int64_t get_unix_timestamp() {
+#ifdef _WIN32
+    return (int64_t)time(NULL);
+#else
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int64_t)tv.tv_sec;
+#endif
+}
+
+// Initialize protocol header
+void init_protocol_header(protocol_header_t* header, uint16_t msg_type,
+                         uint32_t length, const char* session_token) {
+    memset(header, 0, sizeof(protocol_header_t));
+    
+    header->magic = htonl(PROTOCOL_MAGIC);
+    header->version = htons(PROTOCOL_VERSION);
+    header->message_type = htons(msg_type);
+    header->length = htonl(length);
+    header->timestamp = get_unix_timestamp();
+    
+    // Generate message ID
+    generate_message_id(header->message_id);
+    
+    // Copy session token if provided
+    if (session_token) {
+        memcpy(header->session_token, session_token, 32);
+    }
+}
+
+// Validate protocol header
+int validate_protocol_header(protocol_header_t* header) {
+    // Check magic number
+    if (ntohl(header->magic) != PROTOCOL_MAGIC) {
+        return -1;  // Invalid magic
+    }
+    
+    // Check version
+    uint16_t version = ntohs(header->version);
+    if (version != PROTOCOL_VERSION) {
+        return -2;  // Version mismatch
+    }
+    
+    // Check payload length
+    uint32_t length = ntohl(header->length);
+    if (length > MAX_PAYLOAD_SIZE) {
+        return -3;  // Payload too large
+    }
+    
+    return 0;  // Valid
+}
+
+// Send protocol message with header
+int send_protocol_message(socket_t socket, uint16_t msg_type, const char* payload,
+                         const char* session_token) {
+    protocol_header_t header;
+    uint32_t payload_length = payload ? strlen(payload) : 0;
+    
+    // Initialize header
+    init_protocol_header(&header, msg_type, payload_length, session_token);
+    
+    // Send header (64 bytes fixed)
+    int header_sent = send(socket, (char*)&header, sizeof(protocol_header_t), 0);
+    if (header_sent != sizeof(protocol_header_t)) {
+        return -1;
+    }
+    
+    // Send payload if exists
+    if (payload_length > 0) {
+        int payload_sent = send(socket, payload, payload_length, 0);
+        if (payload_sent != (int)payload_length) {
+            return -2;
+        }
+    }
+    
+    return header_sent + payload_length;
+}
+
+// Receive protocol message with header
+int receive_protocol_message(socket_t socket, protocol_header_t* header,
+                             char* payload, int max_payload_size) {
+    // Receive header (64 bytes fixed)
+    int bytes_received = recv(socket, (char*)header, sizeof(protocol_header_t), 0);
+    if (bytes_received != sizeof(protocol_header_t)) {
+        return -1;  // Header receive failed
+    }
+    
+    // Validate header
+    int validation = validate_protocol_header(header);
+    if (validation != 0) {
+        return validation;  // -1, -2, or -3
+    }
+    
+    // Get payload length (convert from network byte order)
+    uint32_t payload_length = ntohl(header->length);
+    
+    // Check if payload buffer is large enough
+    if (payload_length > (uint32_t)(max_payload_size - 1)) {
+        return -4;  // Buffer too small
+    }
+    
+    // Receive payload if exists
+    if (payload_length > 0) {
+        memset(payload, 0, max_payload_size);
+        int bytes_received = recv(socket, payload, payload_length, 0);
+        if (bytes_received != (int)payload_length) {
+            return -5;  // Payload receive failed
+        }
+        payload[payload_length] = '\0';  // Null terminate for string safety
+    } else {
+        payload[0] = '\0';
+    }
+    
+    return (int)payload_length;
+}
+
