@@ -87,10 +87,13 @@ socket_t connect_to_server(const char* host, int port) {
     server_addr.sin_port = htons(port);
     
     // Convert host to IP address
-    if (inet_pton(AF_INET, host, &server_addr.sin_addr) <= 0) {
+    // Use inet_addr for better compatibility with older Windows/MinGW
+    unsigned long addr = inet_addr(host);
+    if (addr == INADDR_NONE) {
         closesocket(client_socket);
         return INVALID_SOCKET;
     }
+    server_addr.sin_addr.s_addr = addr;
 
     // Connect to server
     if (connect(client_socket, (struct sockaddr*)&server_addr, 

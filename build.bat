@@ -17,10 +17,25 @@ if %ERRORLEVEL% NEQ 0 (
 REM Create lib directory
 if not exist lib mkdir lib
 
+REM Detect Python architecture
+echo.
+echo Detecting Python architecture...
+for /f %%i in ('python -c "import struct; print(struct.calcsize('P') * 8)"') do set PYTHON_BITS=%%i
+echo Python is %PYTHON_BITS%-bit
+
+REM Set architecture flag for GCC
+if "%PYTHON_BITS%"=="64" (
+    set ARCH_FLAG=-m64
+    echo Building 64-bit DLL...
+) else (
+    set ARCH_FLAG=-m32
+    echo Building 32-bit DLL...
+)
+
 REM Compile the shared library
 echo.
 echo Compiling C library...
-gcc -Wall -O2 -shared src/network/network.c src/network/python_wrapper.c -o lib/network.dll -lws2_32
+gcc -Wall -O2 %ARCH_FLAG% -shared src/network/network.c src/network/python_wrapper.c -o lib/network.dll -lws2_32
 
 if %ERRORLEVEL% EQU 0 (
     echo.
@@ -31,8 +46,8 @@ if %ERRORLEVEL% EQU 0 (
     echo.
     echo Next steps:
     echo 1. Install Python dependencies: pip install -r requirements.txt
-    echo 2. Run server: python src/python/chat_server.py
-    echo 3. Run client: python src/python/chat_client.py
+    echo 2. Run server: python src/python/server.py
+    echo 3. Run client: python src/python/app.py
     echo ================================================
 ) else (
     echo.

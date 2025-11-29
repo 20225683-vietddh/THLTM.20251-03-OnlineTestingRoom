@@ -4,7 +4,7 @@
 #ifdef _WIN32
     #include <winsock2.h>
     #include <ws2tcpip.h>
-    #pragma comment(lib, "ws2_32.lib")
+    // Note: ws2_32 is linked in build script (no need for pragma comment with GCC)
     typedef SOCKET socket_t;
 #else
     #include <sys/socket.h>

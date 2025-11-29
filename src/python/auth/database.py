@@ -87,7 +87,7 @@ class Database:
         conn.commit()
         conn.close()
         
-        print(f"✓ Database initialized at: {self.db_path}")
+        print(f"[OK] Database initialized at: {self.db_path}")
     
     # ==================== USER OPERATIONS ====================
     
