@@ -8,7 +8,6 @@ from .test_repository import TestRepository
 from .room_repository import RoomRepository
 from .stats_repository import StatsRepository
 
-
 class DatabaseManager:
     """
     Main database manager - Facade for all repositories
@@ -96,6 +95,10 @@ class DatabaseManager:
     def get_student_rooms(self, student_id):
         """Get student's rooms"""
         return self.rooms.get_student_rooms(student_id)
+    
+    def get_available_rooms(self, student_id=None):
+        """Get available rooms"""
+        return self.rooms.get_available_rooms(student_id)
     
     # ==================== ROOM QUESTIONS (Delegate to RoomRepository) ====================
     

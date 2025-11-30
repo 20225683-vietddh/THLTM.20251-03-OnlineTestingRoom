@@ -12,7 +12,12 @@ from protocol_wrapper import (
     MSG_END_ROOM_REQ, MSG_END_ROOM_RES,
     MSG_ADD_QUESTION_REQ, MSG_ADD_QUESTION_RES,
     MSG_GET_QUESTIONS_REQ, MSG_GET_QUESTIONS_RES,
-    MSG_DELETE_QUESTION_REQ, MSG_DELETE_QUESTION_RES
+    MSG_DELETE_QUESTION_REQ, MSG_DELETE_QUESTION_RES,
+    MSG_JOIN_ROOM_REQ, MSG_JOIN_ROOM_RES,
+    MSG_GET_STUDENT_ROOMS_REQ, MSG_GET_STUDENT_ROOMS_RES,
+    MSG_GET_AVAILABLE_ROOMS_REQ, MSG_GET_AVAILABLE_ROOMS_RES,
+    MSG_START_ROOM_TEST_REQ, MSG_START_ROOM_TEST_RES,
+    MSG_SUBMIT_ROOM_TEST_REQ, MSG_SUBMIT_ROOM_TEST_RES
 )
 
 
@@ -264,6 +269,163 @@ class StudentHandler:
         self.conn = connection
         self.ui = ui_callbacks
         self.questions = []
+        
+    def join_room(self, room_id):
+        """Join a test room by room ID"""
+        try:
+            # Send join room request
+            self.conn.send_message(MSG_JOIN_ROOM_REQ, {
+                'room_id': room_id
+            })
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_JOIN_ROOM_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    data = payload.get('data', {})
+                    return {
+                        'success': True,
+                        'room_name': data.get('room_name'),
+                        'room_id': data.get('room_id')
+                    }
+                else:
+                    return {'success': False, 'message': payload.get('message')}
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to join room: {str(e)}")
+    
+    def refresh_rooms(self):
+        """Get list of rooms student has joined"""
+        try:
+            # Send get student rooms request
+            self.conn.send_message(MSG_GET_STUDENT_ROOMS_REQ, {})
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_GET_STUDENT_ROOMS_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    data = payload.get('data', {})
+                    return data.get('rooms', [])
+                else:
+                    raise ValueError(payload.get('message', 'Failed to get rooms'))
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to refresh rooms: {str(e)}")
+    
+    def get_available_rooms(self):
+        """Get list of available rooms to join"""
+        try:
+            # Send get available rooms request
+            self.conn.send_message(MSG_GET_AVAILABLE_ROOMS_REQ, {})
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_GET_AVAILABLE_ROOMS_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    data = payload.get('data', {})
+                    return data.get('rooms', [])
+                else:
+                    raise ValueError(payload.get('message', 'Failed to get available rooms'))
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to get available rooms: {str(e)}")
+    
+    def start_room_test(self, room_id):
+        """Start test for a specific room"""
+        try:
+            # Send start room test request
+            self.conn.send_message(MSG_START_ROOM_TEST_REQ, {
+                'room_id': room_id
+            })
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_START_ROOM_TEST_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    data = payload.get('data', {})
+                    questions = data.get('questions', [])
+                    duration = data.get('duration_minutes', 30)
+                    room_name = data.get('room_name', 'Test Room')
+                    
+                    # Show test screen via UI callback
+                    self.questions = questions
+                    self.ui['show_test'](questions, duration)
+                    
+                    return {
+                        'success': True,
+                        'questions': questions,
+                        'duration': duration,
+                        'room_name': room_name
+                    }
+                else:
+                    return {'success': False, 'message': payload.get('message')}
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to start room test: {str(e)}")
+    
+    def submit_room_test(self, room_id, answers):
+        """Submit test answers for a room"""
+        try:
+            # Send submit request
+            self.conn.send_message(MSG_SUBMIT_ROOM_TEST_REQ, {
+                'room_id': room_id,
+                'answers': answers
+            })
+            
+            # Receive result
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_SUBMIT_ROOM_TEST_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    result = payload.get('data', {})
+                    
+                    # Show result via UI callback
+                    self.ui['show_result'](result)
+                    return True
+                else:
+                    raise ValueError(payload.get('message', 'Failed to submit test'))
+            
+            raise ValueError("Failed to receive result")
+            
+        except Exception as e:
+            raise Exception(f"Failed to submit test: {str(e)}")
         
     def load_test_config(self, full_name):
         """Load test configuration"""

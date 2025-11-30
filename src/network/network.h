@@ -4,7 +4,6 @@
 #ifdef _WIN32
     #include <winsock2.h>
     #include <ws2tcpip.h>
-    // Note: ws2_32 is linked in build script (no need for pragma comment with GCC)
     typedef SOCKET socket_t;
 #else
     #include <sys/socket.h>
@@ -30,18 +29,18 @@
 #define PROTOCOL_VERSION 0x0100    // v1.0
 
 // Message Types
-#define MSG_REGISTER_REQ    0x0001
-#define MSG_REGISTER_RES    0x0002
-#define MSG_LOGIN_REQ       0x0003
-#define MSG_LOGIN_RES       0x0004
-#define MSG_LOGOUT_REQ      0x0005
-#define MSG_LOGOUT_RES      0x0006
-#define MSG_TEST_CONFIG     0x0010
-#define MSG_TEST_START_REQ  0x0011
-#define MSG_TEST_START_RES  0x0012
-#define MSG_TEST_QUESTIONS  0x0013
-#define MSG_TEST_SUBMIT     0x0014
-#define MSG_TEST_RESULT     0x0015
+#define MSG_REGISTER_REQ 0x0001
+#define MSG_REGISTER_RES 0x0002
+#define MSG_LOGIN_REQ 0x0003
+#define MSG_LOGIN_RES 0x0004
+#define MSG_LOGOUT_REQ 0x0005
+#define MSG_LOGOUT_RES 0x0006
+#define MSG_TEST_CONFIG 0x0010
+#define MSG_TEST_START_REQ 0x0011
+#define MSG_TEST_START_RES 0x0012
+#define MSG_TEST_QUESTIONS 0x0013
+#define MSG_TEST_SUBMIT 0x0014
+#define MSG_TEST_RESULT 0x0015
 #define MSG_TEACHER_DATA_REQ 0x0020
 #define MSG_TEACHER_DATA_RES 0x0021
 // Test Room Management

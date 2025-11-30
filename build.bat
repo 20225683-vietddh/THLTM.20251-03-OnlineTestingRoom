@@ -46,8 +46,8 @@ if %ERRORLEVEL% EQU 0 (
     echo.
     echo Next steps:
     echo 1. Install Python dependencies: pip install -r requirements.txt
-    echo 2. Run server: python src/python/server.py
-    echo 3. Run client: python src/python/app.py
+    echo 2. Run server: python src/python/server/main.py
+    echo 3. Run client: python src/python/client/main.py
     echo ================================================
 ) else (
     echo.

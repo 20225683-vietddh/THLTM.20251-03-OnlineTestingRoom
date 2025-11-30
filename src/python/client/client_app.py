@@ -140,27 +140,40 @@ class TestClientApp(ctk.CTk):
             self.show_login()
     
     def show_student_test(self, full_name):
-        """Show student test"""
+        """Show student room lobby"""
         try:
             # Clear UI
             for widget in self.main_frame.winfo_children():
                 widget.destroy()
             
-            # Create student window
-            self.student_window = StudentWindow(self.main_frame, {
-                'on_start_test': self.handle_start_test,
-                'on_submit_test': self.handle_submit_test
-            })
+            # Store full name for later use
+            self.student_full_name = full_name
+            self.current_room_id = None
             
-            # Create handler
+            # Create handler first
             self.student_handler = StudentHandler(self.conn, {
                 'show_ready': lambda fn, nq, d: self.student_window.show_ready_screen(fn, nq, d),
                 'show_test': lambda q, d: self.student_window.show_test_screen(q, d),
                 'show_result': lambda r: self.student_window.show_result_screen(r, full_name)
             })
             
-            # Load test config
-            self.student_handler.load_test_config(full_name)
+            # Create student window with callbacks
+            self.student_window = StudentWindow(self.main_frame, {
+                'on_start_test': self.handle_start_test,
+                'on_submit_test': self.handle_submit_test,
+                'on_join_room': self.handle_join_room,
+                'on_enter_room': self.handle_enter_room,
+                'on_refresh_rooms': self.handle_refresh_student_rooms,
+                'on_refresh_available': self.handle_refresh_available_rooms,
+                'on_logout': self.handle_logout
+            })
+            
+            # Show room lobby
+            self.student_window.show_room_lobby(full_name)
+            
+            # Load rooms initially
+            self.handle_refresh_student_rooms()
+            self.handle_refresh_available_rooms()
             
         except Exception as e:
             self.show_error("Student Test Error", str(e))
@@ -176,7 +189,12 @@ class TestClientApp(ctk.CTk):
     def handle_submit_test(self, answers):
         """Handle submit test"""
         try:
-            self.student_handler.submit_test(answers)
+            # If we have a current room ID, submit to room test
+            if hasattr(self, 'current_room_id') and self.current_room_id:
+                self.student_handler.submit_room_test(self.current_room_id, answers)
+            else:
+                # Legacy: submit to old test system
+                self.student_handler.submit_test(answers)
         except Exception as e:
             self.show_error("Submit Test Error", str(e))
     
@@ -262,6 +280,57 @@ class TestClientApp(ctk.CTk):
                 self.teacher_window.update_questions(questions)
         except Exception as e:
             self.show_error("Load Questions Error", str(e))
+    
+    def handle_join_room(self, room_id):
+        """Handle student join room"""
+        try:
+            result = self.student_handler.join_room(room_id)
+            
+            if result['success']:
+                from tkinter import messagebox
+                messagebox.showinfo("Success", f"Joined room: {result['room_name']}")
+                # Refresh both lists
+                self.handle_refresh_student_rooms()
+                self.handle_refresh_available_rooms()
+            else:
+                self.show_error("Join Room Error", result.get('message', 'Unknown error'))
+        except Exception as e:
+            self.show_error("Join Room Error", str(e))
+    
+    def handle_refresh_student_rooms(self):
+        """Handle refresh student joined rooms"""
+        try:
+            rooms = self.student_handler.refresh_rooms()
+            # Update UI with joined rooms
+            if hasattr(self.student_window, 'update_joined_rooms'):
+                self.student_window.update_joined_rooms(rooms)
+        except Exception as e:
+            self.show_error("Refresh Rooms Error", str(e))
+    
+    def handle_refresh_available_rooms(self):
+        """Handle refresh available rooms"""
+        try:
+            rooms = self.student_handler.get_available_rooms()
+            # Update UI with available rooms
+            if hasattr(self.student_window, 'update_available_rooms'):
+                self.student_window.update_available_rooms(rooms)
+        except Exception as e:
+            self.show_error("Refresh Available Rooms Error", str(e))
+    
+    def handle_enter_room(self, room_id):
+        """Handle student entering an active room to take test"""
+        try:
+            # Store current room ID for submission
+            self.current_room_id = room_id
+            
+            # Request test from server
+            result = self.student_handler.start_room_test(room_id)
+            
+            if not result.get('success'):
+                self.show_error("Start Test Error", result.get('message', 'Failed to start test'))
+                
+        except Exception as e:
+            self.show_error("Enter Room Error", str(e))
     
     def handle_logout(self):
         """Handle logout"""

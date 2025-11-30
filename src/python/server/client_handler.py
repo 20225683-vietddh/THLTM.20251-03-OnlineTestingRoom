@@ -10,7 +10,9 @@ from protocol_wrapper import (
     MSG_REGISTER_REQ, MSG_LOGIN_REQ,
     MSG_CREATE_ROOM_REQ, MSG_GET_ROOMS_REQ,
     MSG_START_ROOM_REQ, MSG_END_ROOM_REQ,
-    MSG_ADD_QUESTION_REQ, MSG_GET_QUESTIONS_REQ, MSG_DELETE_QUESTION_REQ
+    MSG_ADD_QUESTION_REQ, MSG_GET_QUESTIONS_REQ, MSG_DELETE_QUESTION_REQ,
+    MSG_JOIN_ROOM_REQ, MSG_GET_STUDENT_ROOMS_REQ, MSG_GET_AVAILABLE_ROOMS_REQ,
+    MSG_START_ROOM_TEST_REQ, MSG_SUBMIT_ROOM_TEST_REQ
 )
 
 
@@ -65,7 +67,8 @@ class ClientHandler:
                     
                     # Handle based on role
                     if session['role'] == 'student':
-                        self.handlers.handle_student_test(client_socket, session)
+                        # Student: handle room-based workflow
+                        self._handle_student_requests(client_socket, session)
                     else:
                         # Teacher: send initial data then handle room management
                         self.handlers.handle_teacher_data(client_socket, session)
@@ -88,6 +91,37 @@ class ClientHandler:
             except:
                 pass
     
+    def _handle_student_requests(self, client_socket, session):
+        """Handle ongoing student requests (join rooms, take tests)"""
+        try:
+            while True:
+                # Receive next request
+                request = self.proto.receive_message(client_socket)
+                msg_type = request['message_type']
+                
+                # Route request
+                if msg_type == MSG_JOIN_ROOM_REQ:
+                    self.handlers.handle_join_room(client_socket, session, request)
+                
+                elif msg_type == MSG_GET_STUDENT_ROOMS_REQ:
+                    self.handlers.handle_get_student_rooms(client_socket, session, request)
+                
+                elif msg_type == MSG_GET_AVAILABLE_ROOMS_REQ:
+                    self.handlers.handle_get_available_rooms(client_socket, session, request)
+                
+                elif msg_type == MSG_START_ROOM_TEST_REQ:
+                    self.handlers.handle_start_room_test(client_socket, session, request)
+                
+                elif msg_type == MSG_SUBMIT_ROOM_TEST_REQ:
+                    self.handlers.handle_submit_room_test(client_socket, session, request)
+                
+                else:
+                    self.handlers.send_error(client_socket, 2000, "Invalid request type")
+                    break
+                    
+        except Exception as e:
+            self.log(f"[Student {session['username']}] Connection ended: {str(e)}")
+    
     def _handle_teacher_requests(self, client_socket, session):
         """Handle ongoing teacher requests (room management)"""
         try:
@@ -95,8 +129,6 @@ class ClientHandler:
                 # Receive next request
                 request = self.proto.receive_message(client_socket)
                 msg_type = request['message_type']
-                
-                self.log(f"[Teacher {session['username']}] Request: {msg_type}")
                 
                 # Route request
                 if msg_type == MSG_CREATE_ROOM_REQ:

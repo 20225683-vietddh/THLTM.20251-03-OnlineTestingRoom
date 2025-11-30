@@ -34,7 +34,7 @@ Based on the goals analysis:
 │   Magic     │  Version    │  Message Type │   Length    │
 │  (4 bytes)  │  (2 bytes)  │   (2 bytes)   │  (4 bytes)  │
 ├─────────────┼─────────────┼───────────────┼─────────────┤
-│           Message ID (16 bytes UUID)                    │
+│                Message ID (16 bytes UUID)               │
 ├─────────────────────────────────────────────────────────┤
 │              Timestamp (8 bytes - Unix time)            │
 ├─────────────────────────────────────────────────────────┤
@@ -44,7 +44,7 @@ Based on the goals analysis:
 └─────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────┐
 │                  PAYLOAD (Variable length)              │
-│                     JSON Data                           │
+│                         JSON Data                       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -85,6 +85,24 @@ Based on the goals analysis:
 | `0x0015` | TEST_RESULT | S→C | Yes | Test result |
 | `0x0020` | TEACHER_DATA_REQ | C→S | Yes | Teacher data request |
 | `0x0021` | TEACHER_DATA_RES | S→C | Yes | Teacher data response |
+| `0x0030` | CREATE_ROOM_REQ | C→S | Yes | Create test room request |
+| `0x0031` | CREATE_ROOM_RES | S→C | Yes | Create test room response |
+| `0x0032` | JOIN_ROOM_REQ | C→S | Yes | Student join room request |
+| `0x0033` | JOIN_ROOM_RES | S→C | Yes | Student join room response |
+| `0x0034` | START_ROOM_REQ | C→S | Yes | Start test in room request |
+| `0x0035` | START_ROOM_RES | S→C | Yes | Start test in room response |
+| `0x0036` | END_ROOM_REQ | C→S | Yes | End test in room request |
+| `0x0037` | END_ROOM_RES | S→C | Yes | End test in room response |
+| `0x0038` | GET_ROOMS_REQ | C→S | Yes | Get teacher rooms request |
+| `0x0039` | GET_ROOMS_RES | S→C | Yes | Get teacher rooms response |
+| `0x0040` | ADD_QUESTION_REQ | C→S | Yes | Add question to room request |
+| `0x0041` | ADD_QUESTION_RES | S→C | Yes | Add question to room response |
+| `0x0042` | GET_QUESTIONS_REQ | C→S | Yes | Get room questions request |
+| `0x0043` | GET_QUESTIONS_RES | S→C | Yes | Get room questions response |
+| `0x0044` | DELETE_QUESTION_REQ | C→S | Yes | Delete question request |
+| `0x0045` | DELETE_QUESTION_RES | S→C | Yes | Delete question response |
+| `0x0046` | GET_STUDENT_ROOMS_REQ | C→S | Yes | Get student rooms request |
+| `0x0047` | GET_STUDENT_ROOMS_RES | S→C | Yes | Get student rooms response |
 | `0x00FF` | ERROR | S→C | No | Error response |
 | `0x00FE` | HEARTBEAT | C↔S | Optional | Keep-alive message |
 
@@ -362,7 +380,83 @@ Based on the goals analysis:
 }
 ```
 
-### 14. HEARTBEAT (0x00FE)
+### 14. JOIN_ROOM_REQ (0x0032)
+
+**Client → Server**
+
+```json
+{
+    "room_code": "ABC123"
+}
+```
+
+### 15. JOIN_ROOM_RES (0x0033)
+
+**Server → Client**
+
+**Success:**
+```json
+{
+    "status": "success",
+    "code": 1000,
+    "message": "Joined room successfully",
+    "data": {
+        "room_id": 5,
+        "room_name": "Network Programming Quiz",
+        "room_code": "ABC123",
+        "teacher_name": "Dr. Smith",
+        "num_questions": 10,
+        "duration_minutes": 30,
+        "status": "waiting"
+    }
+}
+```
+
+**Failure:**
+```json
+{
+    "status": "error",
+    "code": 2000,
+    "message": "Room not found"
+}
+```
+
+### 16. GET_STUDENT_ROOMS_REQ (0x0046)
+
+**Client → Server**
+
+```json
+{}
+```
+
+### 17. GET_STUDENT_ROOMS_RES (0x0047)
+
+**Server → Client**
+
+```json
+{
+    "status": "success",
+    "code": 1000,
+    "message": "Student rooms loaded",
+    "data": {
+        "rooms": [
+            {
+                "id": 5,
+                "room_name": "Network Programming Quiz",
+                "room_code": "ABC123",
+                "teacher_name": "Dr. Smith",
+                "num_questions": 10,
+                "duration_minutes": 30,
+                "room_status": "waiting",
+                "joined_at": "2024-11-28T14:30:00",
+                "participant_status": "joined"
+            }
+        ]
+    }
+}
+```
+
+### 18. HEARTBEAT (0x00FE)
 
 **Client ↔ Server**
 
@@ -427,6 +521,38 @@ Client                              Server
   │                                   │
   │  Store token locally              │
   │  Use token in all future requests │
+```
+
+### Student Room Flow (New)
+
+```
+Client                              Server
+  │                                   │
+  │  [After successful login]         │
+  │                                   │
+  │  GET_STUDENT_ROOMS_REQ (0x0046)   │
+  ├──────────────────────────────────►│
+  │                                   │
+  │  GET_STUDENT_ROOMS_RES (0x0047)   │
+  │  {rooms: [...]}                   │
+  │◄──────────────────────────────────┤
+  │                                   │
+  │  [Show room lobby]                │
+  │  [Student enters room code]       │
+  │                                   │
+  │  JOIN_ROOM_REQ (0x0032)           │
+  │  {room_code: "ABC123"}            │
+  ├──────────────────────────────────►│
+  │                                   │
+  │                    Validate code  │
+  │                    Add participant│
+  │                                   │
+  │  JOIN_ROOM_RES (0x0033)           │
+  │  {room details}                   │
+  │◄──────────────────────────────────┤
+  │                                   │
+  │  [Joined successfully]            │
+  │  [Wait for teacher to start]      │
 ```
 
 ### Student Test Flow

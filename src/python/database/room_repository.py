@@ -248,6 +248,52 @@ class RoomRepository:
             })
         return rooms
     
+    def get_available_rooms(self, student_id=None):
+        """Get list of available rooms (optionally filter out already joined by student)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        if student_id:
+            # Get rooms NOT joined by this student
+            cursor.execute('''
+                SELECT r.id, r.room_name, r.room_code, u.full_name as teacher_name,
+                       r.num_questions, r.duration_minutes, r.status, r.created_at
+                FROM test_rooms r
+                JOIN users u ON r.teacher_id = u.id
+                WHERE r.id NOT IN (
+                    SELECT room_id FROM room_participants WHERE student_id = ?
+                )
+                AND r.status IN ('waiting', 'active')
+                ORDER BY r.created_at DESC
+            ''', (student_id,))
+        else:
+            # Get all non-ended rooms
+            cursor.execute('''
+                SELECT r.id, r.room_name, r.room_code, u.full_name as teacher_name,
+                       r.num_questions, r.duration_minutes, r.status, r.created_at
+                FROM test_rooms r
+                JOIN users u ON r.teacher_id = u.id
+                WHERE r.status IN ('waiting', 'active')
+                ORDER BY r.created_at DESC
+            ''')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        rooms = []
+        for row in rows:
+            rooms.append({
+                'id': row[0],
+                'room_name': row[1],
+                'room_code': row[2],
+                'teacher_name': row[3],
+                'num_questions': row[4],
+                'duration_minutes': row[5],
+                'status': row[6],
+                'created_at': str(row[7]) if row[7] else None
+            })
+        return rooms
+    
     def add_room_question(self, room_id, question_text, option_a, option_b, option_c, option_d, correct_answer, question_order=0):
         """Add a question to a room"""
         conn = self.get_connection()

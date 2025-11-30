@@ -13,6 +13,8 @@ from protocol_wrapper import (
     MSG_CREATE_ROOM_RES, MSG_GET_ROOMS_RES,
     MSG_START_ROOM_RES, MSG_END_ROOM_RES,
     MSG_ADD_QUESTION_RES, MSG_GET_QUESTIONS_RES, MSG_DELETE_QUESTION_RES,
+    MSG_JOIN_ROOM_RES, MSG_GET_STUDENT_ROOMS_RES, MSG_GET_AVAILABLE_ROOMS_RES,
+    MSG_START_ROOM_TEST_RES, MSG_SUBMIT_ROOM_TEST_RES,
     ERR_SUCCESS, ERR_BAD_REQUEST, ERR_INVALID_CREDS,
     ERR_USERNAME_EXISTS, ERR_INTERNAL
 )
@@ -544,5 +546,269 @@ class RequestHandlers:
             
         except Exception as e:
             self.log(f"✗ Delete question error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_join_room(self, client_socket, session, request):
+        """Handle student join room request"""
+        try:
+            payload = request.get('payload', {})
+            room_id = payload.get('room_id')
+            
+            if not room_id:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Missing room_id")
+                return
+            
+            # Get student user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # Check if user is student
+            if user['role'] != 'student':
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Only students can join rooms")
+                return
+            
+            # Get room by ID first to get room_code
+            # We need to find room by ID, so let's get all rooms and filter
+            # Better: add get_room_by_id to repository
+            rooms = self.db.get_teacher_rooms(user['id'])  # This won't work
+            
+            # Alternative: join by ID directly
+            # For now, let's modify the join_room method to accept room_id
+            # But join_room needs room_code... let's check available rooms
+            available_rooms = self.db.get_available_rooms(user['id'])
+            room_data = next((r for r in available_rooms if r['id'] == room_id), None)
+            
+            if not room_data:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Room not found or already joined")
+                return
+            
+            # Join room using room_code
+            result = self.db.join_room(room_data['room_code'], user['id'])
+            
+            if not result['success']:
+                self.send_error(client_socket, ERR_BAD_REQUEST, result.get('error', 'Failed to join room'))
+                return
+            
+            room = result['room']
+            self.log(f"[OK] {session['username']} joined room: {room['room_name']} (ID: {room_id})")
+            
+            # Send success response
+            self.send_response(client_socket, MSG_JOIN_ROOM_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Joined room successfully',
+                'data': {
+                    'room_id': room['id'],
+                    'room_name': room['room_name'],
+                    'room_code': room['room_code'],
+                    'teacher_name': room['teacher_name'],
+                    'num_questions': room['num_questions'],
+                    'duration_minutes': room['duration_minutes'],
+                    'status': room['status']
+                }
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Join room error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_get_student_rooms(self, client_socket, session, request):
+        """Handle get student rooms request"""
+        try:
+            # Get student user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # Check if user is student
+            if user['role'] != 'student':
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Only students can view their rooms")
+                return
+            
+            # Get student rooms
+            rooms = self.db.get_student_rooms(user['id'])
+            
+            self.log(f"[OK] Loaded {len(rooms)} joined rooms for student {session['username']}")
+            
+            # Send response
+            self.send_response(client_socket, MSG_GET_STUDENT_ROOMS_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Student rooms loaded',
+                'data': {
+                    'rooms': rooms
+                }
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Get student rooms error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_get_available_rooms(self, client_socket, session, request):
+        """Handle get available rooms request"""
+        try:
+            # Get student user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # Check if user is student
+            if user['role'] != 'student':
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Only students can view available rooms")
+                return
+            
+            # Get available rooms (exclude already joined)
+            rooms = self.db.get_available_rooms(user['id'])
+            
+            self.log(f"[OK] Loaded {len(rooms)} available rooms for student {session['username']}")
+            
+            # Send response
+            self.send_response(client_socket, MSG_GET_AVAILABLE_ROOMS_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Available rooms loaded',
+                'data': {
+                    'rooms': rooms
+                }
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Get available rooms error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_start_room_test(self, client_socket, session, request):
+        """Handle student starting test in a room"""
+        try:
+            payload = request.get('payload', {})
+            room_id = payload.get('room_id')
+            
+            if not room_id:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Missing room_id")
+                return
+            
+            # Get student user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # Check if user is student
+            if user['role'] != 'student':
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Only students can take tests")
+                return
+            
+            # Verify student has joined this room
+            student_rooms = self.db.get_student_rooms(user['id'])
+            room_found = next((r for r in student_rooms if r['id'] == room_id), None)
+            
+            if not room_found:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "You haven't joined this room")
+                return
+            
+            # Verify room is active
+            if room_found['room_status'] != 'active':
+                self.send_error(client_socket, ERR_BAD_REQUEST, f"Room is not active (status: {room_found['room_status']})")
+                return
+            
+            # Get questions for this room
+            questions = self.db.get_room_questions(room_id)
+            
+            if not questions:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "No questions available for this room")
+                return
+            
+            # Format questions for client (hide correct answers)
+            formatted_questions = []
+            for q in questions:
+                formatted_questions.append({
+                    'id': q['id'],
+                    'question': q['question_text'],
+                    'options': [
+                        q['option_a'],
+                        q['option_b'],
+                        q['option_c'],
+                        q['option_d']
+                    ]
+                })
+            
+            self.log(f"[OK] {session['username']} started test in room {room_id} ({room_found['room_name']})")
+            
+            # Update participant status to 'testing'
+            self.db.update_participant_status(room_id, user['id'], 'testing')
+            
+            # Send questions
+            self.send_response(client_socket, MSG_START_ROOM_TEST_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Test started',
+                'data': {
+                    'room_id': room_id,
+                    'room_name': room_found['room_name'],
+                    'questions': formatted_questions,
+                    'duration_minutes': room_found['duration_minutes']
+                }
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Start room test error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_submit_room_test(self, client_socket, session, request):
+        """Handle student submitting test answers for a room"""
+        try:
+            payload = request.get('payload', {})
+            room_id = payload.get('room_id')
+            answers = payload.get('answers', [])
+            
+            if not room_id:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Missing room_id")
+                return
+            
+            # Get student user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # Get questions with correct answers
+            questions = self.db.get_room_questions(room_id)
+            
+            # Calculate score
+            score = 0
+            for answer in answers:
+                question = next((q for q in questions if q['id'] == answer.get('question_id')), None)
+                if question and question['correct_answer'] == answer.get('selected'):
+                    score += 1
+            
+            # Save result
+            result_id = self.db.save_test_result(
+                student_id=user['id'],
+                score=score,
+                total_questions=len(questions),
+                answers_json=json.dumps(answers),
+                duration_seconds=0  # Could track actual duration
+            )
+            
+            # Update participant status
+            self.db.update_participant_status(room_id, user['id'], 'submitted')
+            
+            percentage = round(score / len(questions) * 100, 2) if questions else 0
+            
+            self.log(f"✅ {session['username']} completed room {room_id} test: {score}/{len(questions)} ({percentage}%)")
+            
+            # Send result
+            self.send_response(client_socket, MSG_SUBMIT_ROOM_TEST_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Test completed',
+                'data': {
+                    'score': score,
+                    'total': len(questions),
+                    'percentage': percentage,
+                    'result_id': result_id
+                }
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Submit room test error: {str(e)}")
             self.send_error(client_socket, ERR_INTERNAL, str(e))
 

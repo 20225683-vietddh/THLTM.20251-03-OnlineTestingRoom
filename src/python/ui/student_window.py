@@ -19,8 +19,10 @@ class StudentWindow:
                 - on_start_test: callback()
                 - on_submit_test: callback(answers)
                 - on_answer_change: callback(question_idx, selected)
-                - on_join_room: callback(room_code)
+                - on_join_room: callback(room_id)
                 - on_refresh_rooms: callback()
+                - on_refresh_available: callback()
+                - on_logout: callback()
         """
         self.parent = parent
         self.callbacks = callbacks
@@ -43,7 +45,8 @@ class StudentWindow:
         self.submit_button = None
         
         # Room data
-        self.rooms_data = []
+        self.joined_rooms_data = []
+        self.available_rooms_data = []
     
     def show_room_lobby(self, full_name):
         """Show room lobby where student can join a test room"""
@@ -51,150 +54,281 @@ class StudentWindow:
         for widget in self.parent.winfo_children():
             widget.destroy()
         
-        lobby_frame = ctk.CTkFrame(self.parent)
-        lobby_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        # Main container
+        main_frame = ctk.CTkFrame(self.parent)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Header
-        ctk.CTkLabel(
-            lobby_frame,
-            text=f"Welcome, {full_name}!",
-            font=("Arial", 22, "bold")
-        ).pack(pady=20)
-        
-        # Join Room Section
-        join_frame = ctk.CTkFrame(lobby_frame)
-        join_frame.pack(fill="x", padx=20, pady=20)
+        # Top bar with welcome and logout
+        top_bar = ctk.CTkFrame(main_frame)
+        top_bar.pack(fill="x", padx=10, pady=10)
         
         ctk.CTkLabel(
-            join_frame,
-            text="🔐 Enter Room Code",
-            font=("Arial", 18, "bold")
-        ).pack(pady=10)
-        
-        ctk.CTkLabel(
-            join_frame,
-            text="Enter the 6-character code provided by your teacher:",
-            font=("Arial", 12)
-        ).pack(pady=5)
-        
-        # Room code entry
-        code_frame = ctk.CTkFrame(join_frame)
-        code_frame.pack(pady=10)
-        
-        self.room_code_entry = ctk.CTkEntry(
-            code_frame,
-            width=250,
-            height=45,
-            font=("Arial", 20, "bold"),
-            placeholder_text="ABC123",
-            justify="center"
-        )
-        self.room_code_entry.pack(side="left", padx=10)
-        
-        ctk.CTkButton(
-            code_frame,
-            text="Join Room",
-            command=self._handle_join_room,
-            height=45,
-            width=120,
-            font=("Arial", 14, "bold"),
-            fg_color="green",
-            hover_color="darkgreen"
-        ).pack(side="left")
-        
-        # Or divider
-        ctk.CTkLabel(
-            lobby_frame,
-            text="— OR —",
-            font=("Arial", 12)
-        ).pack(pady=10)
-        
-        # My Rooms Section
-        rooms_frame = ctk.CTkFrame(lobby_frame)
-        rooms_frame.pack(fill="both", expand=True, padx=20, pady=10)
-        
-        header_frame = ctk.CTkFrame(rooms_frame)
-        header_frame.pack(fill="x", pady=10)
-        
-        ctk.CTkLabel(
-            header_frame,
-            text="📚 My Joined Rooms",
-            font=("Arial", 16, "bold")
+            top_bar,
+            text=f"👋 Welcome, {full_name}!",
+            font=("Arial", 20, "bold")
         ).pack(side="left", padx=10)
         
         ctk.CTkButton(
-            header_frame,
-            text="🔄 Refresh",
-            command=self._handle_refresh_rooms,
-            width=100
+            top_bar,
+            text="🚪 Logout",
+            command=self._handle_logout,
+            width=100,
+            height=35,
+            fg_color="red",
+            hover_color="darkred"
         ).pack(side="right", padx=10)
         
-        # Rooms list
-        self.rooms_text = ctk.CTkTextbox(rooms_frame, font=("Courier New", 11))
-        self.rooms_text.pack(fill="both", expand=True, padx=5, pady=5)
+        # Create two-column layout
+        columns_frame = ctk.CTkFrame(main_frame)
+        columns_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        self._update_rooms_lobby()
+        # Left column: Available Rooms
+        left_frame = ctk.CTkFrame(columns_frame)
+        left_frame.pack(side="left", fill="both", expand=True, padx=(0, 5))
+        
+        left_header = ctk.CTkFrame(left_frame)
+        left_header.pack(fill="x", pady=10, padx=10)
+        
+        ctk.CTkLabel(
+            left_header,
+            text="🏫 Available Rooms",
+            font=("Arial", 16, "bold")
+        ).pack(side="left")
+        
+        ctk.CTkButton(
+            left_header,
+            text="🔄",
+            command=self._handle_refresh_available,
+            width=40,
+            height=30
+        ).pack(side="right")
+        
+        # Available rooms list (scrollable with buttons)
+        self.available_scroll = ctk.CTkScrollableFrame(left_frame, height=400)
+        self.available_scroll.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        
+        # Right column: My Joined Rooms
+        right_frame = ctk.CTkFrame(columns_frame)
+        right_frame.pack(side="right", fill="both", expand=True, padx=(5, 0))
+        
+        right_header = ctk.CTkFrame(right_frame)
+        right_header.pack(fill="x", pady=10, padx=10)
+        
+        ctk.CTkLabel(
+            right_header,
+            text="📚 My Joined Rooms",
+            font=("Arial", 16, "bold")
+        ).pack(side="left")
+        
+        ctk.CTkButton(
+            right_header,
+            text="🔄",
+            command=self._handle_refresh_rooms,
+            width=40,
+            height=30
+        ).pack(side="right")
+        
+        # Joined rooms list (scrollable with cards)
+        self.joined_scroll = ctk.CTkScrollableFrame(right_frame, height=400)
+        self.joined_scroll.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        
+        # Initial update
+        self._update_available_rooms()
+        self._update_joined_rooms()
     
-    def _update_rooms_lobby(self):
-        """Update rooms list in lobby"""
-        self.rooms_text.configure(state="normal")
-        self.rooms_text.delete("1.0", "end")
+    def _update_available_rooms(self):
+        """Update available rooms display"""
+        # Clear existing widgets
+        for widget in self.available_scroll.winfo_children():
+            widget.destroy()
         
-        # Header
-        self.rooms_text.insert("end",
-            f"{'Room Name':<30} {'Teacher':<20} {'Status':<15} {'Duration':<10}\n"
-        )
-        self.rooms_text.insert("end", "=" * 80 + "\n")
-        
-        # Rooms data
-        if self.rooms_data:
-            for room in self.rooms_data:
-                status_icon = "⏳" if room['room_status'] == 'waiting' else ("▶️" if room['room_status'] == 'active' else "✅")
-                self.rooms_text.insert("end",
-                    f"{room['room_name']:<30} "
-                    f"{room['teacher_name']:<20} "
-                    f"{status_icon} {room['room_status']:<13} "
-                    f"{room['duration_minutes']}min\n"
-                )
-        else:
-            self.rooms_text.insert("end", "\nNo rooms joined yet. Enter a room code above to join!\n")
-        
-        self.rooms_text.configure(state="disabled")
-    
-    def update_rooms(self, rooms):
-        """Update rooms data and refresh display"""
-        self.rooms_data = rooms
-        if hasattr(self, 'rooms_text'):
-            self._update_rooms_lobby()
-    
-    def _handle_join_room(self):
-        """Handle join room button"""
-        room_code = self.room_code_entry.get().strip().upper()
-        
-        if not room_code:
-            messagebox.showerror("Invalid Input", "Please enter a room code")
+        if not self.available_rooms_data:
+            ctk.CTkLabel(
+                self.available_scroll,
+                text="No available rooms at the moment.\nCheck back later!",
+                font=("Arial", 12),
+                text_color="gray"
+            ).pack(pady=20)
             return
         
-        if len(room_code) != 6:
-            messagebox.showerror("Invalid Input", "Room code must be 6 characters")
+        # Display each available room as a card with join button
+        for room in self.available_rooms_data:
+            room_card = ctk.CTkFrame(self.available_scroll)
+            room_card.pack(fill="x", pady=5, padx=5)
+            
+            # Room info
+            info_frame = ctk.CTkFrame(room_card)
+            info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+            
+            # Room name
+            ctk.CTkLabel(
+                info_frame,
+                text=room['room_name'],
+                font=("Arial", 14, "bold")
+            ).pack(anchor="w")
+            
+            # Teacher and details
+            details_text = f"👨‍🏫 {room['teacher_name']} | ⏱ {room['duration_minutes']} min | 📝 {room['num_questions']} questions"
+            ctk.CTkLabel(
+                info_frame,
+                text=details_text,
+                font=("Arial", 10),
+                text_color="gray"
+            ).pack(anchor="w")
+            
+            # Status
+            status_icon = "⏳ Waiting" if room['status'] == 'waiting' else ("▶️ Active" if room['status'] == 'active' else "✅ Ended")
+            status_color = "orange" if room['status'] == 'waiting' else ("green" if room['status'] == 'active' else "gray")
+            ctk.CTkLabel(
+                info_frame,
+                text=status_icon,
+                font=("Arial", 10),
+                text_color=status_color
+            ).pack(anchor="w")
+            
+            # Join button
+            if room['status'] in ['waiting', 'active']:
+                ctk.CTkButton(
+                    room_card,
+                    text="Join",
+                    command=lambda r=room: self._handle_join_room_by_id(r['id']),
+                    width=80,
+                    height=60,
+                    fg_color="green",
+                    hover_color="darkgreen"
+                ).pack(side="right", padx=10, pady=10)
+            else:
+                ctk.CTkLabel(
+                    room_card,
+                    text="Ended",
+                    text_color="gray",
+                    width=80
+                ).pack(side="right", padx=10, pady=10)
+    
+    def _update_joined_rooms(self):
+        """Update joined rooms display"""
+        # Clear existing widgets
+        for widget in self.joined_scroll.winfo_children():
+            widget.destroy()
+        
+        if not self.joined_rooms_data:
+            ctk.CTkLabel(
+                self.joined_scroll,
+                text="No rooms joined yet.\nJoin a room from the left!",
+                font=("Arial", 12),
+                text_color="gray"
+            ).pack(pady=20)
             return
         
+        # Display each joined room as a card with action button
+        for room in self.joined_rooms_data:
+            room_card = ctk.CTkFrame(self.joined_scroll)
+            room_card.pack(fill="x", pady=5, padx=5)
+            
+            # Room info
+            info_frame = ctk.CTkFrame(room_card)
+            info_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+            
+            # Room name
+            ctk.CTkLabel(
+                info_frame,
+                text=room['room_name'],
+                font=("Arial", 14, "bold")
+            ).pack(anchor="w")
+            
+            # Teacher and details
+            details_text = f"👨‍🏫 {room['teacher_name']} | ⏱ {room['duration_minutes']} min"
+            ctk.CTkLabel(
+                info_frame,
+                text=details_text,
+                font=("Arial", 10),
+                text_color="gray"
+            ).pack(anchor="w")
+            
+            # Status
+            status_icon = "⏳ Waiting" if room['room_status'] == 'waiting' else ("▶️ Active" if room['room_status'] == 'active' else "✅ Ended")
+            status_color = "orange" if room['room_status'] == 'waiting' else ("green" if room['room_status'] == 'active' else "gray")
+            ctk.CTkLabel(
+                info_frame,
+                text=status_icon,
+                font=("Arial", 10, "bold"),
+                text_color=status_color
+            ).pack(anchor="w")
+            
+            # Action button based on status
+            if room['room_status'] == 'waiting':
+                ctk.CTkLabel(
+                    room_card,
+                    text="Waiting\nfor teacher",
+                    text_color="gray",
+                    font=("Arial", 9),
+                    width=80
+                ).pack(side="right", padx=10, pady=10)
+            elif room['room_status'] == 'active':
+                ctk.CTkButton(
+                    room_card,
+                    text="Enter\nTest",
+                    command=lambda r=room: self._handle_enter_room(r['id']),
+                    width=80,
+                    height=60,
+                    fg_color="green",
+                    hover_color="darkgreen",
+                    font=("Arial", 12, "bold")
+                ).pack(side="right", padx=10, pady=10)
+            else:  # ended
+                ctk.CTkButton(
+                    room_card,
+                    text="View\nResults",
+                    command=lambda r=room: self._handle_view_results(r['id']),
+                    width=80,
+                    height=60,
+                    fg_color="blue",
+                    hover_color="darkblue",
+                    font=("Arial", 11, "bold")
+                ).pack(side="right", padx=10, pady=10)
+    
+    def update_available_rooms(self, rooms):
+        """Update available rooms data and refresh display"""
+        self.available_rooms_data = rooms
+        if hasattr(self, 'available_scroll'):
+            self._update_available_rooms()
+    
+    def update_joined_rooms(self, rooms):
+        """Update joined rooms data and refresh display"""
+        self.joined_rooms_data = rooms
+        if hasattr(self, 'joined_scroll'):
+            self._update_joined_rooms()
+    
+    def _handle_join_room_by_id(self, room_id):
+        """Handle join room by room ID"""
         if self.callbacks.get('on_join_room'):
-            self.callbacks['on_join_room'](room_code)
+            self.callbacks['on_join_room'](room_id)
     
     def _handle_refresh_rooms(self):
-        """Handle refresh rooms button"""
+        """Handle refresh joined rooms button"""
         if self.callbacks.get('on_refresh_rooms'):
             self.callbacks['on_refresh_rooms']()
     
-    def show_room_joined(self, room_name):
-        """Show success message after joining room"""
-        messagebox.showinfo(
-            "Joined Successfully!",
-            f"You have joined the room: {room_name}\n\nWait for the teacher to start the test."
-        )
-        self.room_code_entry.delete(0, "end")
-        
+    def _handle_refresh_available(self):
+        """Handle refresh available rooms button"""
+        if self.callbacks.get('on_refresh_available'):
+            self.callbacks['on_refresh_available']()
+    
+    def _handle_enter_room(self, room_id):
+        """Handle enter room to take test"""
+        if self.callbacks.get('on_enter_room'):
+            self.callbacks['on_enter_room'](room_id)
+    
+    def _handle_view_results(self, room_id):
+        """Handle view results for completed test"""
+        from tkinter import messagebox
+        messagebox.showinfo("Results", "View results feature coming soon!")
+    
+    def _handle_logout(self):
+        """Handle logout button"""
+        if self.callbacks.get('on_logout'):
+            self.callbacks['on_logout']()
+       
     def show_ready_screen(self, full_name, num_questions, duration):
         """Show ready screen before test starts"""
         # Clear parent
