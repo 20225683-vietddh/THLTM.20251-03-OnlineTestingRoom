@@ -366,7 +366,7 @@ python src/python/tests/test_auth.py
 
 ### Bước 4️⃣: Chạy ứng dụng
 
-## 🎯 **Production Mode (Khuyên dùng)**
+## **Production Mode (Khuyên dùng)**
 
 ### **Server:**
 ```bash
@@ -462,63 +462,3 @@ python src/python/tests/test_client.py
 **File mẫu** đã có sẵn 10 câu hỏi về Network Programming!
 
 ---
-
-## Protocol Communication
-
-### Message Format
-
-Ứng dụng sử dụng các message format sau giữa Client và Server:
-
-#### Client → Server:
-```
-NAME:<student_name>          # Đăng ký tên học sinh
-START                        # Request bắt đầu thi
-ANSWERS:<json_data>          # Nộp bài thi
-```
-
-#### Server → Client:
-```
-CONFIG:<json_data>           # Cấu hình bài thi (số câu, thời gian)
-QUESTIONS:<json_data>        # Danh sách câu hỏi
-RESULT:<json_data>           # Kết quả điểm số
-```
-
-### JSON Data Structures
-
-**CONFIG:**
-```json
-{
-  "num_questions": 10,
-  "duration": 30
-}
-```
-
-**QUESTIONS:**
-```json
-{
-  "questions": [
-    {
-      "id": 1,
-      "question": "What does TCP stand for?",
-      "options": ["Option A", "Option B", "Option C", "Option D"]
-    }
-  ]
-}
-```
-
-**ANSWERS:**
-```json
-[
-  {"question_id": 1, "selected": 0},
-  {"question_id": 2, "selected": 2}
-]
-```
-
-**RESULT:**
-```json
-{
-  "score": 8,
-  "total": 10,
-  "percentage": 80.0
-}
-```
