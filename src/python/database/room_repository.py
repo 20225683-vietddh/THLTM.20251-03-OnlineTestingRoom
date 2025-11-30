@@ -1,0 +1,250 @@
+"""
+Room Repository
+Handles test room and participant database operations
+"""
+import sqlite3
+import random
+import string
+from datetime import datetime
+
+
+class RoomRepository:
+    """Repository for room operations"""
+    
+    def __init__(self, db_connection_getter):
+        """
+        Initialize repository
+        
+        Args:
+            db_connection_getter: Function that returns database connection
+        """
+        self.get_connection = db_connection_getter
+    
+    def create_test_room(self, room_name, teacher_id, num_questions, duration_minutes):
+        """Create new test room"""
+        # Generate room code
+        room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO test_rooms (room_name, room_code, teacher_id, num_questions, duration_minutes, status)
+                VALUES (?, ?, ?, ?, ?, 'waiting')
+            ''', (room_name, room_code, teacher_id, num_questions, duration_minutes))
+            
+            room_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            
+            return {'room_id': room_id, 'room_code': room_code}
+        except sqlite3.IntegrityError:
+            # If room_code collision, retry
+            return self.create_test_room(room_name, teacher_id, num_questions, duration_minutes)
+    
+    def get_room_by_code(self, room_code):
+        """Get room by code"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT r.id, r.room_name, r.room_code, r.teacher_id, u.full_name,
+                   r.num_questions, r.duration_minutes, r.status, r.created_at,
+                   r.start_time, r.end_time
+            FROM test_rooms r
+            JOIN users u ON r.teacher_id = u.id
+            WHERE r.room_code = ?
+        ''', (room_code,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                'id': row[0],
+                'room_name': row[1],
+                'room_code': row[2],
+                'teacher_id': row[3],
+                'teacher_name': row[4],
+                'num_questions': row[5],
+                'duration_minutes': row[6],
+                'status': row[7],
+                'created_at': str(row[8]) if row[8] else None,
+                'start_time': str(row[9]) if row[9] else None,
+                'end_time': str(row[10]) if row[10] else None
+            }
+        return None
+    
+    def get_teacher_rooms(self, teacher_id):
+        """Get list of rooms for a teacher"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT r.id, r.room_name, r.room_code, r.num_questions, r.duration_minutes,
+                   r.status, r.created_at, r.start_time, r.end_time,
+                   COUNT(DISTINCT p.student_id) as participant_count
+            FROM test_rooms r
+            LEFT JOIN room_participants p ON r.id = p.room_id
+            WHERE r.teacher_id = ?
+            GROUP BY r.id
+            ORDER BY r.created_at DESC
+        ''', (teacher_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        rooms = []
+        for row in rows:
+            rooms.append({
+                'id': row[0],
+                'room_name': row[1],
+                'room_code': row[2],
+                'num_questions': row[3],
+                'duration_minutes': row[4],
+                'status': row[5],
+                'created_at': str(row[6]) if row[6] else None,
+                'start_time': str(row[7]) if row[7] else None,
+                'end_time': str(row[8]) if row[8] else None,
+                'participant_count': row[9]
+            })
+        return rooms
+    
+    def start_test_room(self, room_id):
+        """Start test in room"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE test_rooms
+            SET status = 'active', start_time = ?
+            WHERE id = ? AND status = 'waiting'
+        ''', (datetime.now().isoformat(), room_id))
+        
+        success = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        
+        return success
+    
+    def end_test_room(self, room_id):
+        """End test in room"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE test_rooms
+            SET status = 'ended', end_time = ?
+            WHERE id = ? AND status = 'active'
+        ''', (datetime.now().isoformat(), room_id))
+        
+        success = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        
+        return success
+    
+    def join_room(self, room_code, student_id):
+        """Student joins a room"""
+        room = self.get_room_by_code(room_code)
+        if not room:
+            return {'success': False, 'error': 'Room not found'}
+        
+        if room['status'] == 'ended':
+            return {'success': False, 'error': 'Test has ended'}
+        
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO room_participants (room_id, student_id, status)
+                VALUES (?, ?, 'joined')
+            ''', (room['id'], student_id))
+            
+            conn.commit()
+            conn.close()
+            
+            return {'success': True, 'room': room}
+        except sqlite3.IntegrityError:
+            # Already joined
+            return {'success': True, 'room': room, 'already_joined': True}
+    
+    def get_room_participants(self, room_id):
+        """Get participants in a room"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT p.id, p.student_id, u.username, u.full_name, p.joined_at,
+                   p.status, p.test_result_id
+            FROM room_participants p
+            JOIN users u ON p.student_id = u.id
+            WHERE p.room_id = ?
+            ORDER BY p.joined_at
+        ''', (room_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        participants = []
+        for row in rows:
+            participants.append({
+                'id': row[0],
+                'student_id': row[1],
+                'username': row[2],
+                'full_name': row[3],
+                'joined_at': str(row[4]) if row[4] else None,
+                'status': row[5],
+                'test_result_id': row[6]
+            })
+        return participants
+    
+    def update_participant_status(self, room_id, student_id, status):
+        """Update participant status"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE room_participants
+            SET status = ?
+            WHERE room_id = ? AND student_id = ?
+        ''', (status, room_id, student_id))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_student_rooms(self, student_id):
+        """Get list of rooms student has joined"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT r.id, r.room_name, r.room_code, u.full_name as teacher_name,
+                   r.num_questions, r.duration_minutes, r.status, p.joined_at, p.status as participant_status
+            FROM room_participants p
+            JOIN test_rooms r ON p.room_id = r.id
+            JOIN users u ON r.teacher_id = u.id
+            WHERE p.student_id = ?
+            ORDER BY p.joined_at DESC
+        ''', (student_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        rooms = []
+        for row in rows:
+            rooms.append({
+                'id': row[0],
+                'room_name': row[1],
+                'room_code': row[2],
+                'teacher_name': row[3],
+                'num_questions': row[4],
+                'duration_minutes': row[5],
+                'room_status': row[6],
+                'joined_at': str(row[7]) if row[7] else None,
+                'participant_status': row[8]
+            })
+        return rooms
+

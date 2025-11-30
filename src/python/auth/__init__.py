@@ -1,11 +1,10 @@
 """
 Authentication module for Test Application
-Includes database, auth, and session management
+Auth and session management only (database moved to database package)
 """
 
-from .database import Database
 from .auth import AuthManager
 from .session import SessionManager
 
-__all__ = ['Database', 'AuthManager', 'SessionManager']
+__all__ = ['AuthManager', 'SessionManager']
 

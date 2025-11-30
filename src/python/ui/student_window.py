@@ -4,6 +4,7 @@ Handles student test interface with timer and questions
 """
 import customtkinter as ctk
 from datetime import datetime, timedelta
+from tkinter import messagebox
 
 class StudentWindow:
     """Student test interface UI component"""
@@ -18,6 +19,8 @@ class StudentWindow:
                 - on_start_test: callback()
                 - on_submit_test: callback(answers)
                 - on_answer_change: callback(question_idx, selected)
+                - on_join_room: callback(room_code)
+                - on_refresh_rooms: callback()
         """
         self.parent = parent
         self.callbacks = callbacks
@@ -38,6 +41,159 @@ class StudentWindow:
         self.prev_button = None
         self.next_button = None
         self.submit_button = None
+        
+        # Room data
+        self.rooms_data = []
+    
+    def show_room_lobby(self, full_name):
+        """Show room lobby where student can join a test room"""
+        # Clear parent
+        for widget in self.parent.winfo_children():
+            widget.destroy()
+        
+        lobby_frame = ctk.CTkFrame(self.parent)
+        lobby_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Header
+        ctk.CTkLabel(
+            lobby_frame,
+            text=f"Welcome, {full_name}!",
+            font=("Arial", 22, "bold")
+        ).pack(pady=20)
+        
+        # Join Room Section
+        join_frame = ctk.CTkFrame(lobby_frame)
+        join_frame.pack(fill="x", padx=20, pady=20)
+        
+        ctk.CTkLabel(
+            join_frame,
+            text="🔐 Enter Room Code",
+            font=("Arial", 18, "bold")
+        ).pack(pady=10)
+        
+        ctk.CTkLabel(
+            join_frame,
+            text="Enter the 6-character code provided by your teacher:",
+            font=("Arial", 12)
+        ).pack(pady=5)
+        
+        # Room code entry
+        code_frame = ctk.CTkFrame(join_frame)
+        code_frame.pack(pady=10)
+        
+        self.room_code_entry = ctk.CTkEntry(
+            code_frame,
+            width=250,
+            height=45,
+            font=("Arial", 20, "bold"),
+            placeholder_text="ABC123",
+            justify="center"
+        )
+        self.room_code_entry.pack(side="left", padx=10)
+        
+        ctk.CTkButton(
+            code_frame,
+            text="Join Room",
+            command=self._handle_join_room,
+            height=45,
+            width=120,
+            font=("Arial", 14, "bold"),
+            fg_color="green",
+            hover_color="darkgreen"
+        ).pack(side="left")
+        
+        # Or divider
+        ctk.CTkLabel(
+            lobby_frame,
+            text="— OR —",
+            font=("Arial", 12)
+        ).pack(pady=10)
+        
+        # My Rooms Section
+        rooms_frame = ctk.CTkFrame(lobby_frame)
+        rooms_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        header_frame = ctk.CTkFrame(rooms_frame)
+        header_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkLabel(
+            header_frame,
+            text="📚 My Joined Rooms",
+            font=("Arial", 16, "bold")
+        ).pack(side="left", padx=10)
+        
+        ctk.CTkButton(
+            header_frame,
+            text="🔄 Refresh",
+            command=self._handle_refresh_rooms,
+            width=100
+        ).pack(side="right", padx=10)
+        
+        # Rooms list
+        self.rooms_text = ctk.CTkTextbox(rooms_frame, font=("Courier New", 11))
+        self.rooms_text.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        self._update_rooms_lobby()
+    
+    def _update_rooms_lobby(self):
+        """Update rooms list in lobby"""
+        self.rooms_text.configure(state="normal")
+        self.rooms_text.delete("1.0", "end")
+        
+        # Header
+        self.rooms_text.insert("end",
+            f"{'Room Name':<30} {'Teacher':<20} {'Status':<15} {'Duration':<10}\n"
+        )
+        self.rooms_text.insert("end", "=" * 80 + "\n")
+        
+        # Rooms data
+        if self.rooms_data:
+            for room in self.rooms_data:
+                status_icon = "⏳" if room['room_status'] == 'waiting' else ("▶️" if room['room_status'] == 'active' else "✅")
+                self.rooms_text.insert("end",
+                    f"{room['room_name']:<30} "
+                    f"{room['teacher_name']:<20} "
+                    f"{status_icon} {room['room_status']:<13} "
+                    f"{room['duration_minutes']}min\n"
+                )
+        else:
+            self.rooms_text.insert("end", "\nNo rooms joined yet. Enter a room code above to join!\n")
+        
+        self.rooms_text.configure(state="disabled")
+    
+    def update_rooms(self, rooms):
+        """Update rooms data and refresh display"""
+        self.rooms_data = rooms
+        if hasattr(self, 'rooms_text'):
+            self._update_rooms_lobby()
+    
+    def _handle_join_room(self):
+        """Handle join room button"""
+        room_code = self.room_code_entry.get().strip().upper()
+        
+        if not room_code:
+            messagebox.showerror("Invalid Input", "Please enter a room code")
+            return
+        
+        if len(room_code) != 6:
+            messagebox.showerror("Invalid Input", "Room code must be 6 characters")
+            return
+        
+        if self.callbacks.get('on_join_room'):
+            self.callbacks['on_join_room'](room_code)
+    
+    def _handle_refresh_rooms(self):
+        """Handle refresh rooms button"""
+        if self.callbacks.get('on_refresh_rooms'):
+            self.callbacks['on_refresh_rooms']()
+    
+    def show_room_joined(self, room_name):
+        """Show success message after joining room"""
+        messagebox.showinfo(
+            "Joined Successfully!",
+            f"You have joined the room: {room_name}\n\nWait for the teacher to start the test."
+        )
+        self.room_code_entry.delete(0, "end")
         
     def show_ready_screen(self, full_name, num_questions, duration):
         """Show ready screen before test starts"""

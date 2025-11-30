@@ -44,6 +44,18 @@
 #define MSG_TEST_RESULT     0x0015
 #define MSG_TEACHER_DATA_REQ 0x0020
 #define MSG_TEACHER_DATA_RES 0x0021
+// Test Room Management
+#define MSG_CREATE_ROOM_REQ  0x0030
+#define MSG_CREATE_ROOM_RES  0x0031
+#define MSG_JOIN_ROOM_REQ    0x0032
+#define MSG_JOIN_ROOM_RES    0x0033
+#define MSG_START_ROOM_REQ   0x0034
+#define MSG_START_ROOM_RES   0x0035
+#define MSG_END_ROOM_REQ     0x0036
+#define MSG_END_ROOM_RES     0x0037
+#define MSG_GET_ROOMS_REQ    0x0038
+#define MSG_GET_ROOMS_RES    0x0039
+#define MSG_ROOM_STATUS      0x003A
 #define MSG_ERROR           0x00FF
 #define MSG_HEARTBEAT       0x00FE
 

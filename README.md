@@ -20,8 +20,19 @@ Dự án **Online Multiple Choice Testing Application** - Ứng dụng thi trắ
 
 - **Backend (C)**: Xử lý tất cả các chức năng mạng (socket, TCP/IP, client-server communication)
 - **Frontend (Python)**: GUI hiện đại với CustomTkinter, gọi các hàm C thông qua ctypes
-- **Architecture**: Client-Server model với multi-threaded handling
+- **Architecture**: Django-style clean modular architecture với Repository pattern
 - **Protocol**: TAP (Test Application Protocol) v1.0 - Binary protocol with structured headers
+- **Database**: SQLite với separated repositories (User, Test, Room, Stats)
+
+### ⭐ Features v2.0
+
+- ✅ **Clean Architecture**: Modular design, mỗi module < 300 dòng
+- ✅ **Room Management**: Teacher tạo phòng thi, học sinh join bằng code
+- ✅ **Real-time Control**: Teacher kiểm soát start/end test
+- ✅ **Role-based Access**: Student vs Teacher interfaces
+- ✅ **Session Management**: Token-based authentication
+- ✅ **Statistics Dashboard**: Real-time stats cho teacher
+- ✅ **Repository Pattern**: Separated database operations
 
 ### TAP Protocol v1.0
 
@@ -47,25 +58,30 @@ Xem chi tiết: [PROTOCOL_SPEC.md](PROTOCOL_SPEC.md)
 │                    ONLINE TEST APPLICATION                      │
 └─────────────────────────────────────────────────────────────────┘
 
-CLIENT (app.py)                        SERVER (server.py)
+CLIENT (client/)                       SERVER (server/)
 ┌─────────────────┐                    ┌──────────────────┐
 │  CustomTkinter  │                    │  CustomTkinter   │
 │      GUI        │                    │    GUI (Admin)   │
 ├─────────────────┤                    ├──────────────────┤
+│ client_app.py   │                    │  server_gui.py   │
+│  (Main App)     │                    │  (Main Server)   │
 │                 │                    │                  │
-│ UI Components   │                    │  Request Handler │
-│ - login_window  │                    │  (multi-thread)  │
-│ - register_win  │                    │                  │
-│ - student_win   │                    │  Auth System     │
-│ - teacher_win   │                    │  - database.py   │
-│                 │                    │  - auth.py       │
-│  App.py         │                    │  - session.py    │
-│  (Orchestrator) │                    │                  │
+│ handlers.py     │                    │  handlers.py     │
+│  - Teacher      │                    │  - Registration  │
+│  - Student      │                    │  - Login/Auth    │
+│                 │                    │  - Test grading  │
+│ connection.py   │                    │                  │
+│  - TCP Client   │                    │  room_manager.py │
+│  - Protocol     │                    │  - Room CRUD     │
+│                 │                    │  - Start/End     │
+│ ui/             │                    │                  │
+│  - Windows      │                    │  client_handler  │
+│                 │                    │  - Routing       │
 ├─────────────────┤                    ├──────────────────┤
 │                 │    TCP Socket      │                  │
 │ protocol_wrapper│◄──────────────────►│ protocol_wrapper │
 │    (Python)     │   TAP Protocol     │    (Python)      │
-│                 │   Port: 5000       │                  │
+│                 │   Port: 5555       │                  │
 ├─────────────────┤                    ├──────────────────┤
 │   ctypes        │                    │    ctypes        │
 └────────┬────────┘                    └─────────┬────────┘
@@ -76,6 +92,14 @@ CLIENT (app.py)                        SERVER (server.py)
     │  - Socket operations (create, connect, send) │
     │  - Protocol functions (send/receive header)  │
     │  - Binary header packing/unpacking           │
+    └──────────────────────────────────────────────┘
+    
+    ┌─────────────────────────────────────────────┐
+    │    Database Layer (database/ package)        │
+    │  - user_repository (User CRUD)               │
+    │  - test_repository (Test results)            │
+    │  - room_repository (Rooms & participants)    │
+    │  - stats_repository (Statistics)             │
     └──────────────────────────────────────────────┘
 ```
 
@@ -248,54 +272,92 @@ CLIENT (teacher_window)               SERVER
 
 ## Cấu trúc dự án
 
+### 📂 Clean Architecture (Django-style)
+
 ```
 Project/
 ├── src/
-│   ├── network/                 # C Network Layer
-│   │   ├── network.h            # Header file với các định nghĩa
-│   │   ├── network.c            # Implementation TCP/IP socket
-│   │   └── python_wrapper.c     # Wrapper functions cho Python
+│   ├── network/                    # C Network Layer (DLL)
+│   │   ├── network.h               # Header file & protocol constants
+│   │   ├── network.c               # TCP/IP socket implementation
+│   │   └── python_wrapper.c        # Python ctypes wrapper
 │   │
-│   └── python/                  # Python Application Layer
-│       ├── auth/                # Authentication Module
-│       │   ├── __init__.py      # Module exports
-│       │   ├── database.py      # SQLite database operations
-│       │   ├── auth.py          # Password hashing & validation
-│       │   └── session.py       # Session management
+│   └── python/                     # Python Application Layer
 │       │
-│       ├── ui/                     # UI Components (Modular)
+│       ├── server/                 SERVER MODULE (Django-style)
+│       │   ├── __init__.py         # Package exports
+│       │   ├── main.py             # Entry point (like manage.py)
+│       │   ├── server_gui.py       # GUI window (275 lines)
+│       │   ├── handlers.py         # Request handlers (296 lines)
+│       │   ├── room_manager.py     # Room operations (190 lines)
+│       │   └── client_handler.py   # Connection routing (84 lines)
+│       │
+│       ├── client/                 CLIENT MODULE (Symmetric)
+│       │   ├── __init__.py         # Package exports
+│       │   ├── main.py             # Entry point
+│       │   ├── client_app.py       # Main application (199 lines)
+│       │   ├── connection.py       # Connection manager (94 lines)
+│       │   └── handlers.py         # Business logic (125 lines)
+│       │
+│       ├── database/               DATABASE (Repository Pattern)
+│       │   ├── __init__.py         # Package exports
+│       │   ├── database_manager.py # Facade pattern (112 lines)
+│       │   ├── connection.py       # DB init & connection (132 lines)
+│       │   ├── user_repository.py  # User CRUD (93 lines)
+│       │   ├── test_repository.py  # Test results (92 lines)
+│       │   ├── room_repository.py  # Rooms & participants (251 lines)
+│       │   └── stats_repository.py # Statistics (52 lines)
+│       │
+│       ├── auth/                   AUTH MODULE
 │       │   ├── __init__.py         # Module exports
-│       │   ├── login_window.py     # Login screen component
-│       │   ├── register_window.py  # Registration screen component
+│       │   ├── auth.py             # Password hashing & validation
+│       │   └── session.py          # Session management
+│       │
+│       ├── ui/                     UI COMPONENTS
+│       │   ├── __init__.py         # Module exports
+│       │   ├── login_window.py     # Login screen
+│       │   ├── register_window.py  # Registration screen
 │       │   ├── student_window.py   # Student test interface
-│       │   └── teacher_window.py   # Teacher dashboard
+│       │   └── teacher_window.py   # Teacher dashboard + room mgmt
 │       │
-│       ├── tests/                  # Test Scripts & Demos
+│       ├── tests/                  # Integration Tests
 │       │   ├── test_auth.py        # Auth system tests
-│       │   ├── test_protocol.py    # TAP protocol tests
-│       │   ├── test_server.py      # Simple server (no auth)
-│       │   └── test_client.py      # Simple client (no auth)
+│       │   ├── test_protocol.py    # Protocol tests
+│       │   ├── test_server.py      # Server tests
+│       │   └── test_client.py      # Client tests
 │       │
-│       ├── network_wrapper.py   # Python ctypes wrapper (legacy)
-│       ├── protocol_wrapper.py  # TAP Protocol wrapper ✅
-│       ├── app.py               # Client application ✅
-│       ├── server.py            # Server application ✅
-│       └── questions.json       # Ngân hàng câu hỏi
+│       ├── protocol_wrapper.py     # TAP Protocol v1.0 wrapper
+│       ├── network_wrapper.py      # Low-level network wrapper
+│       ├── questions.json          # Question bank
+│       ├── app_old.py              # Backup (monolithic version)
+│       └── auth/database_old.py    # Backup (monolithic version)
 │
-├── data/                     # Data Storage
-│   └── users.db              # SQLite database (auto-created)
+├── data/                       # Data Storage
+│   └── app.db                  # SQLite database (auto-created)
 │
-├── lib/                      # Compiled libraries (tự động tạo)
-│   └── network.dll/so/dylib  # Shared library
+├── lib/                        # Compiled Libraries
+│   └── network.dll             # C network library (auto-built)
 │
-├── build.bat                 # Build script cho Windows
-├── build.sh                  # Build script cho Linux/macOS
-├── Makefile                  # Make configuration
-├── requirements.txt          # Python dependencies
-├── .gitignore                # Git ignore rules
-├── README.md                 # 📖 Tài liệu chính
-└── PROTOCOL_SPEC.md          # 📋 Technical reference (709 dòng)
+├── build.bat                   # Windows build script (auto-detect architecture)
+├── build.sh                    # Linux/macOS build script
+├── Makefile                    # Cross-platform build configuration
+├── requirements.txt            # Python dependencies
+├── .gitignore                  # Git ignore rules
+├── README.md                   # 📖 Main documentation
+└── PROTOCOL_SPEC.md            # 📋 Protocol technical spec
 ```
+
+### 📊 Module Statistics
+
+| Module | Files | Total Lines | Avg per File |
+|--------|-------|-------------|--------------|
+| **server/** | 6 files | ~1,215 lines | ~202 lines |
+| **client/** | 4 files | ~547 lines | ~137 lines |
+| **database/** | 6 files | ~732 lines | ~122 lines |
+| **auth/** | 2 files | ~200 lines | ~100 lines |
+| **ui/** | 4 files | ~800 lines | ~200 lines |
+
+**Total: ~3,500 lines** across **22 modular files** ✅
 
 ---
 
@@ -366,46 +428,85 @@ python src/python/tests/test_auth.py
 
 ### Bước 4️⃣: Chạy ứng dụng
 
-## **Production Mode (Khuyên dùng)**
+## **Production Mode (Clean Architecture)**
 
-### **Server:**
+### **🖥️ Server (Modular):**
 ```bash
-python src/python/server.py
+# Chạy server
+python src/python/server/main.py
 ```
 
-1. Click **"Start Server"**
-2. Đợi log: `✓ Authentication server started on port 5000`
+Server tự động:
+- Khởi tạo database
+- Load câu hỏi từ `questions.json`
+- Start listening trên port **5555**
+- Hiển thị GUI với server log, statistics, và connected users
 
-### **Client:**
+### **💻 Client (Modular):**
 ```bash
-python src/python/app.py
+# Chạy client
+python src/python/client/main.py
 ```
 
-**Hướng dẫn sử dụng:**
+---
 
-#### **Đăng ký (lần đầu):**
+## 📖 Hướng dẫn sử dụng
+
+### **👤 Đăng ký (lần đầu):**
 1. Click **"Register"**
 2. Chọn role: **Student** hoặc **Teacher**
 3. Nhập thông tin đầy đủ
-4. Click **"Register"** → Đợi 2 giây tự động chuyển sang Login
+4. Click **"Register"** → Đăng ký thành công
 
-#### **Đăng nhập:**
-1. Click **"Login"**
-2. Chọn role: **Student** hoặc **Teacher**
-3. Nhập username và password
-4. Click **"Login"**
+### **🔐 Đăng nhập:**
+1. Chọn role: **Student** hoặc **Teacher**
+2. Nhập username và password
+3. Click **"Login"**
 
-#### **Student - Làm bài thi:**
-1. Sau khi login → Xem thông tin bài thi
+---
+
+### **👨‍🎓 Student - Làm bài thi:**
+
+**Cách 1: Direct Test (Legacy)**
+1. Login → Xem thông tin bài thi
 2. Click **"Start Test"**
-3. Trả lời câu hỏi (dùng Next/Previous)
+3. Trả lời câu hỏi (Next/Previous)
 4. Click **"Submit Test"**
 5. Xem kết quả
 
-#### **Teacher - Xem dashboard:**
-1. Login với role Teacher
-2. Xem tất cả kết quả thi
-3. Xem thống kê (average, max, min scores)
+**Cách 2: Room-based Test** ⭐ NEW
+1. Login → Vào Room Lobby
+2. Nhập **Room Code** (6 ký tự từ teacher)
+3. Click **"Join Room"**
+4. Đợi teacher bắt đầu bài thi
+5. Làm bài và submit
+
+---
+
+### **👨‍🏫 Teacher - Dashboard & Room Management:**
+
+**Tab 1: 📊 Test Results**
+- Xem tất cả kết quả thi
+- Thống kê (average, max, min scores)
+- Chi tiết từng học sinh
+
+**Tab 2: 🏫 Test Rooms** ⭐ NEW
+1. **Tạo phòng thi:**
+   - Nhập tên phòng
+   - Chọn số câu hỏi (1-50)
+   - Chọn thời gian (5-180 phút)
+   - Click **"Create Room"**
+   - Nhận **Room Code** (VD: ABC123)
+
+2. **Quản lý phòng:**
+   - Xem danh sách phòng thi
+   - Trạng thái: ⏳ Waiting | ▶️ Active | ✅ Ended
+   - Số lượng học sinh tham gia
+   - Start/End controls (coming soon)
+
+3. **Chia sẻ Room Code với học sinh**
+   - Học sinh nhập code để vào phòng
+   - Teacher kiểm soát khi nào bắt đầu/kết thúc
 
 ---
 
