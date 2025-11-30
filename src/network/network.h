@@ -1,115 +1,92 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-#ifdef _WIN32
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    typedef SOCKET socket_t;
-#else
-    #include <sys/socket.h>
-    #include <netinet/in.h>
-    #include <arpa/inet.h>
-    #include <unistd.h>
-    typedef int socket_t;
-    #define INVALID_SOCKET -1
-    #define SOCKET_ERROR -1
-    #define closesocket close
-#endif
+// Include all core modules
+#include "core/socket_ops.h"
+#include "core/protocol.h"
+#include "core/utils.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>  // For uint32_t, uint16_t, int64_t
+// ==================== VERSION INFO ====================
 
-// Constants
-#define BUFFER_SIZE 8192
-#define MAX_CLIENTS 10
-#define MAX_PAYLOAD_SIZE 1048576  // 1 MB
-#define PROTOCOL_MAGIC 0x54415031  // "TAP1"
-#define PROTOCOL_VERSION 0x0100    // v1.0
+#define NETWORK_LIBRARY_VERSION "1.0.0"
+#define NETWORK_LIBRARY_NAME "TAP Network Library"
 
-// Message Types
-#define MSG_REGISTER_REQ 0x0001
-#define MSG_REGISTER_RES 0x0002
-#define MSG_LOGIN_REQ 0x0003
-#define MSG_LOGIN_RES 0x0004
-#define MSG_LOGOUT_REQ 0x0005
-#define MSG_LOGOUT_RES 0x0006
-#define MSG_TEST_CONFIG 0x0010
-#define MSG_TEST_START_REQ 0x0011
-#define MSG_TEST_START_RES 0x0012
-#define MSG_TEST_QUESTIONS 0x0013
-#define MSG_TEST_SUBMIT 0x0014
-#define MSG_TEST_RESULT 0x0015
-#define MSG_TEACHER_DATA_REQ 0x0020
-#define MSG_TEACHER_DATA_RES 0x0021
-// Test Room Management
-#define MSG_CREATE_ROOM_REQ  0x0030
-#define MSG_CREATE_ROOM_RES  0x0031
-#define MSG_JOIN_ROOM_REQ    0x0032
-#define MSG_JOIN_ROOM_RES    0x0033
-#define MSG_START_ROOM_REQ   0x0034
-#define MSG_START_ROOM_RES   0x0035
-#define MSG_END_ROOM_REQ     0x0036
-#define MSG_END_ROOM_RES     0x0037
-#define MSG_GET_ROOMS_REQ    0x0038
-#define MSG_GET_ROOMS_RES    0x0039
-#define MSG_ROOM_STATUS      0x003A
-#define MSG_ERROR           0x00FF
-#define MSG_HEARTBEAT       0x00FE
+// ==================== PYTHON API WRAPPER ====================
 
-// Error Codes
-#define ERR_SUCCESS         1000
-#define ERR_BAD_REQUEST     2000
-#define ERR_INVALID_JSON    2001
-#define ERR_UNAUTHORIZED    3000
-#define ERR_INVALID_CREDS   3001
-#define ERR_SESSION_EXPIRED 3002
-#define ERR_FORBIDDEN       4000
-#define ERR_WRONG_ROLE      4001
-#define ERR_CONFLICT        5000
-#define ERR_USERNAME_EXISTS 5001
-#define ERR_INTERNAL        6000
+// These functions are exposed to Python via ctypes
+// They provide a simple C API that Python can call
 
-// Protocol Header Structure (64 bytes)
-typedef struct {
-    uint32_t magic;              // 4 bytes: 0x54415031
-    uint16_t version;            // 2 bytes: 0x0100
-    uint16_t message_type;       // 2 bytes: Message type code
-    uint32_t length;             // 4 bytes: Payload length
-    char message_id[16];         // 16 bytes: UUID
-    int64_t timestamp;           // 8 bytes: Unix timestamp
-    char session_token[32];      // 32 bytes: Session token or zeros
-    char reserved[12];           // 12 bytes: Reserved (zeros)
-} protocol_header_t;
+/**
+ * @brief Initialize network subsystem (Python API)
+ * @return 0 on success, -1 on failure
+ */
+int py_init_network(void);
 
-// Network initialization
-int init_network();
-void cleanup_network();
+/**
+ * @brief Cleanup network subsystem (Python API)
+ */
+void py_cleanup_network(void);
 
-// Server functions
-socket_t create_server_socket(int port);
-socket_t accept_client(socket_t server_socket);
-int send_message(socket_t socket, const char* message);
-int receive_message(socket_t socket, char* buffer, int buffer_size);
-void close_socket(socket_t socket);
+/**
+ * @brief Create server socket (Python API)
+ * @param port Port number
+ * @return Socket descriptor or INVALID_SOCKET
+ */
+socket_t py_create_server(int port);
 
-// Client functions
-socket_t connect_to_server(const char* host, int port);
+/**
+ * @brief Accept client connection (Python API)
+ * @param server_socket Server socket descriptor
+ * @return Client socket descriptor or INVALID_SOCKET
+ */
+socket_t py_accept_client(socket_t server_socket);
 
-// Protocol functions (New)
-int send_protocol_message(socket_t socket, uint16_t msg_type, const char* payload, 
-                          const char* session_token);
-int receive_protocol_message(socket_t socket, protocol_header_t* header, 
-                             char* payload, int max_payload_size);
-void init_protocol_header(protocol_header_t* header, uint16_t msg_type, 
-                         uint32_t length, const char* session_token);
-int validate_protocol_header(protocol_header_t* header);
+/**
+ * @brief Connect to server (Python API)
+ * @param host Server IP address
+ * @param port Server port
+ * @return Socket descriptor or INVALID_SOCKET
+ */
+socket_t py_connect_to_server(const char* host, int port);
 
-// Utility functions
-const char* get_last_error();
-void generate_message_id(char* message_id);  // Generate 16-byte UUID
-int64_t get_unix_timestamp();  // Get current Unix timestamp
+/**
+ * @brief Close socket (Python API)
+ * @param socket Socket descriptor
+ */
+void py_close_socket(socket_t socket);
+
+/**
+ * @brief Send protocol message (Python API)
+ * @param socket Socket descriptor
+ * @param msg_type Message type
+ * @param payload Payload string (JSON)
+ * @param session_token Session token (can be NULL)
+ * @return Bytes sent or negative on error
+ */
+int py_send_protocol_message(socket_t socket, uint16_t msg_type,
+                              const char* payload, const char* session_token);
+
+/**
+ * @brief Receive protocol message (Python API)
+ * @param socket Socket descriptor
+ * @param header Pointer to header structure
+ * @param payload Buffer for payload
+ * @param max_payload_size Maximum payload size
+ * @return Payload length or negative on error
+ */
+int py_receive_protocol_message(socket_t socket, protocol_header_t* header,
+                                 char* payload, int max_payload_size);
+
+/**
+ * @brief Generate message ID (Python API)
+ * @param message_id Buffer for message ID (16 bytes)
+ */
+void py_generate_message_id(char* message_id);
+
+/**
+ * @brief Get Unix timestamp (Python API)
+ * @return Unix timestamp
+ */
+int64_t py_get_unix_timestamp(void);
 
 #endif // NETWORK_H
-

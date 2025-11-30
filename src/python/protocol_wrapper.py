@@ -6,8 +6,8 @@ import ctypes
 import json
 import platform
 import struct
+import os
 from pathlib import Path
-from network_wrapper import NetworkWrapper
 
 # Protocol constants
 PROTOCOL_MAGIC = 0x54415031  # "TAP1"
@@ -87,21 +87,69 @@ class ProtocolWrapper:
     """Enhanced wrapper with protocol support"""
     
     def __init__(self):
-        # Use base NetworkWrapper for socket operations
-        self.network = NetworkWrapper()
-        self.lib = self.network.lib
+        # Load C network library directly
+        self.lib = None
+        self._load_library()
         
         # Define protocol function signatures
         self._define_protocol_functions()
         
         # Session token (stored locally after login)
         self.session_token = None
+    
+    def _load_library(self):
+        """Load the C network library"""
+        # Get the project root directory
+        current_dir = Path(__file__).parent
+        project_root = current_dir.parent.parent
+        
+        # Determine library name based on platform
+        if platform.system() == "Windows":
+            lib_name = "network.dll"
+        elif platform.system() == "Darwin":
+            lib_name = "libnetwork.dylib"
+        else:
+            lib_name = "libnetwork.so"
+        
+        lib_path = project_root / "lib" / lib_name
+        
+        if not lib_path.exists():
+            raise FileNotFoundError(f"Network library not found: {lib_path}")
+        
+        # Load the library
+        self.lib = ctypes.CDLL(str(lib_path))
         
     def _define_protocol_functions(self):
         """Define C protocol function signatures"""
         # Determine socket type (platform-specific)
         socket_type = ctypes.c_int64 if platform.system() == "Windows" else ctypes.c_int
         
+        # === Basic Socket Functions ===
+        # py_init_network() -> int
+        self.lib.py_init_network.argtypes = []
+        self.lib.py_init_network.restype = ctypes.c_int
+        
+        # py_cleanup_network() -> void
+        self.lib.py_cleanup_network.argtypes = []
+        self.lib.py_cleanup_network.restype = None
+        
+        # py_create_server(int port) -> socket_t
+        self.lib.py_create_server.argtypes = [ctypes.c_int]
+        self.lib.py_create_server.restype = socket_type
+        
+        # py_accept_client(socket_t) -> socket_t
+        self.lib.py_accept_client.argtypes = [socket_type]
+        self.lib.py_accept_client.restype = socket_type
+        
+        # py_connect_to_server(const char*, int) -> socket_t
+        self.lib.py_connect_to_server.argtypes = [ctypes.c_char_p, ctypes.c_int]
+        self.lib.py_connect_to_server.restype = socket_type
+        
+        # py_close_socket(socket_t) -> void
+        self.lib.py_close_socket.argtypes = [socket_type]
+        self.lib.py_close_socket.restype = None
+        
+        # === Protocol Functions ===
         # py_send_protocol_message
         self.lib.py_send_protocol_message.argtypes = [
             socket_type,      # socket
@@ -120,6 +168,7 @@ class ProtocolWrapper:
         ]
         self.lib.py_receive_protocol_message.restype = ctypes.c_int
         
+        # === Utility Functions ===
         # py_generate_message_id
         self.lib.py_generate_message_id.argtypes = [ctypes.c_char_p]
         self.lib.py_generate_message_id.restype = None
@@ -232,24 +281,33 @@ class ProtocolWrapper:
         """Clear stored session token"""
         self.session_token = None
     
-    # Delegate basic socket operations to NetworkWrapper
+    # Delegate basic socket operations to C library
     def init_network(self):
-        return self.network.init_network()
+        """Initialize network subsystem (required for Windows)"""
+        result = self.lib.py_init_network()
+        if result != 0:
+            raise RuntimeError(f"Failed to initialize network: {result}")
+        return result
     
     def cleanup_network(self):
-        return self.network.cleanup_network()
+        """Cleanup network subsystem"""
+        self.lib.py_cleanup_network()
     
     def create_server(self, port):
-        return self.network.create_server(port)
+        """Create TCP server socket"""
+        return self.lib.py_create_server(port)
     
     def accept_client(self, server_socket):
-        return self.network.accept_client(server_socket)
+        """Accept incoming client connection"""
+        return self.lib.py_accept_client(server_socket)
     
     def connect_to_server(self, host, port):
-        return self.network.connect_to_server(host, port)
+        """Connect to server as client"""
+        return self.lib.py_connect_to_server(host.encode('utf-8'), port)
     
     def close_socket(self, socket):
-        return self.network.close_socket(socket)
+        """Close socket connection"""
+        self.lib.py_close_socket(socket)
 
 
 # Message Type Names (for debugging)
@@ -300,4 +358,3 @@ MESSAGE_TYPE_NAMES = {
 def get_message_type_name(msg_type):
     """Get human-readable message type name"""
     return MESSAGE_TYPE_NAMES.get(msg_type, f"UNKNOWN_0x{msg_type:04X}")
-

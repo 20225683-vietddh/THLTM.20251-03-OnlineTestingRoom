@@ -181,13 +181,13 @@ class TeacherWindow:
             width=100
         ).pack(side="right", padx=10)
         
-        # Rooms table
+        # Control panel (pack first to ensure it's always visible)
+        control_frame = ctk.CTkFrame(list_frame)
+        control_frame.pack(fill="x", padx=5, pady=10, side="bottom")
+        
+        # Rooms table (will take remaining space above control panel)
         self.rooms_text = ctk.CTkTextbox(list_frame, font=("Courier New", 10))
         self.rooms_text.pack(fill="both", expand=True, padx=5, pady=5)
-        
-        # Control panel
-        control_frame = ctk.CTkFrame(list_frame)
-        control_frame.pack(fill="x", padx=5, pady=10)
         
         ctk.CTkLabel(
             control_frame,
