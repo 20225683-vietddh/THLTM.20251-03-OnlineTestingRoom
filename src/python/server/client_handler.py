@@ -6,7 +6,12 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from protocol_wrapper import MSG_REGISTER_REQ, MSG_LOGIN_REQ
+from protocol_wrapper import (
+    MSG_REGISTER_REQ, MSG_LOGIN_REQ,
+    MSG_CREATE_ROOM_REQ, MSG_GET_ROOMS_REQ,
+    MSG_START_ROOM_REQ, MSG_END_ROOM_REQ,
+    MSG_ADD_QUESTION_REQ, MSG_GET_QUESTIONS_REQ, MSG_DELETE_QUESTION_REQ
+)
 
 
 class ClientHandler:
@@ -62,7 +67,9 @@ class ClientHandler:
                     if session['role'] == 'student':
                         self.handlers.handle_student_test(client_socket, session)
                     else:
+                        # Teacher: send initial data then handle room management
                         self.handlers.handle_teacher_data(client_socket, session)
+                        self._handle_teacher_requests(client_socket, session)
                     
             else:
                 self.handlers.send_error(client_socket, 2000, "Invalid request")
@@ -80,4 +87,43 @@ class ClientHandler:
                 self.proto.close_socket(client_socket)
             except:
                 pass
+    
+    def _handle_teacher_requests(self, client_socket, session):
+        """Handle ongoing teacher requests (room management)"""
+        try:
+            while True:
+                # Receive next request
+                request = self.proto.receive_message(client_socket)
+                msg_type = request['message_type']
+                
+                self.log(f"[Teacher {session['username']}] Request: {msg_type}")
+                
+                # Route request
+                if msg_type == MSG_CREATE_ROOM_REQ:
+                    self.handlers.handle_create_room(client_socket, session, request)
+                
+                elif msg_type == MSG_GET_ROOMS_REQ:
+                    self.handlers.handle_get_rooms(client_socket, session, request)
+                
+                elif msg_type == MSG_START_ROOM_REQ:
+                    self.handlers.handle_start_room(client_socket, session, request)
+                
+                elif msg_type == MSG_END_ROOM_REQ:
+                    self.handlers.handle_end_room(client_socket, session, request)
+                
+                elif msg_type == MSG_ADD_QUESTION_REQ:
+                    self.handlers.handle_add_question(client_socket, session, request)
+                
+                elif msg_type == MSG_GET_QUESTIONS_REQ:
+                    self.handlers.handle_get_questions(client_socket, session, request)
+                
+                elif msg_type == MSG_DELETE_QUESTION_REQ:
+                    self.handlers.handle_delete_question(client_socket, session, request)
+                
+                else:
+                    self.handlers.send_error(client_socket, 2000, "Invalid request type")
+                    break
+                    
+        except Exception as e:
+            self.log(f"[Teacher {session['username']}] Connection ended: {str(e)}")
 

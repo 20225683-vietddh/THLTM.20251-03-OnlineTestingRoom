@@ -247,4 +247,75 @@ class RoomRepository:
                 'participant_status': row[8]
             })
         return rooms
+    
+    def add_room_question(self, room_id, question_text, option_a, option_b, option_c, option_d, correct_answer, question_order=0):
+        """Add a question to a room"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO room_questions 
+            (room_id, question_text, option_a, option_b, option_c, option_d, correct_answer, question_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (room_id, question_text, option_a, option_b, option_c, option_d, correct_answer, question_order))
+        conn.commit()
+        return cursor.lastrowid
+    
+    def get_room_questions(self, room_id):
+        """Get all questions for a room"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, question_text, option_a, option_b, option_c, option_d, 
+                   correct_answer, question_order
+            FROM room_questions
+            WHERE room_id = ?
+            ORDER BY question_order, id
+        ''', (room_id,))
+        
+        questions = []
+        for row in cursor.fetchall():
+            questions.append({
+                'id': row[0],
+                'question_text': row[1],
+                'option_a': row[2],
+                'option_b': row[3],
+                'option_c': row[4],
+                'option_d': row[5],
+                'correct_answer': row[6],
+                'question_order': row[7]
+            })
+        return questions
+    
+    def update_room_question(self, question_id, question_text, option_a, option_b, option_c, option_d, correct_answer):
+        """Update a room question"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE room_questions
+            SET question_text = ?, option_a = ?, option_b = ?, option_c = ?, 
+                option_d = ?, correct_answer = ?
+            WHERE id = ?
+        ''', (question_text, option_a, option_b, option_c, option_d, correct_answer, question_id))
+        conn.commit()
+    
+    def delete_room_question(self, question_id):
+        """Delete a room question"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM room_questions WHERE id = ?', (question_id,))
+        conn.commit()
+    
+    def delete_all_room_questions(self, room_id):
+        """Delete all questions for a room"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM room_questions WHERE room_id = ?', (room_id,))
+        conn.commit()
+    
+    def get_room_question_count(self, room_id):
+        """Get count of questions in a room"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM room_questions WHERE room_id = ?', (room_id,))
+        return cursor.fetchone()[0]
 

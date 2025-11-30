@@ -23,7 +23,7 @@ class TestClientApp(ctk.CTk):
         
         # Setup window
         self.title("Test Application Client")
-        self.geometry("1200x900")
+        self.geometry("900x600 ")
         
         # Initialize components
         self.auth = AuthManager()
@@ -111,18 +111,29 @@ class TestClientApp(ctk.CTk):
             for widget in self.main_frame.winfo_children():
                 widget.destroy()
             
-            # Create teacher window
-            self.teacher_window = TeacherWindow(self.main_frame, {
-                'on_logout': self.handle_logout
-            })
-            
-            # Create handler
-            handler = TeacherHandler(self.conn, {
+            # Create handler first (need it for callbacks)
+            self.teacher_handler = TeacherHandler(self.conn, {
                 'show_dashboard': lambda fn, results, rooms: self.teacher_window.show_dashboard(fn, results, rooms)
             })
             
+            # Create teacher window with callbacks
+            self.teacher_window = TeacherWindow(self.main_frame, {
+                'on_logout': self.handle_logout,
+                'on_create_room': self.handle_create_room,
+                'on_refresh_rooms': self.handle_refresh_rooms,
+                'on_start_room': self.handle_start_room,
+                'on_end_room': self.handle_end_room,
+                'on_add_question': self.handle_add_question,
+                'on_load_questions': self.handle_load_questions
+            })
+            
+            # Update handler UI callback reference (now that teacher_window exists)
+            self.teacher_handler.ui = {
+                'show_dashboard': lambda fn, results, rooms: self.teacher_window.show_dashboard(fn, results, rooms)
+            }
+            
             # Load dashboard
-            handler.load_dashboard(full_name)
+            self.teacher_handler.load_dashboard(full_name)
             
         except Exception as e:
             self.show_error("Teacher Dashboard Error", str(e))
@@ -168,6 +179,89 @@ class TestClientApp(ctk.CTk):
             self.student_handler.submit_test(answers)
         except Exception as e:
             self.show_error("Submit Test Error", str(e))
+    
+    def handle_create_room(self, room_name, num_questions, duration_minutes):
+        """Handle create room"""
+        try:
+            result = self.teacher_handler.create_room(room_name, num_questions, duration_minutes)
+            
+            if result['success']:
+                # Show success message with room code
+                self.teacher_window.show_room_created(result['room_code'])
+                # Refresh rooms list
+                self.handle_refresh_rooms()
+            else:
+                self.show_error("Create Room Error", result.get('message', 'Unknown error'))
+        except Exception as e:
+            self.show_error("Create Room Error", str(e))
+    
+    def handle_refresh_rooms(self):
+        """Handle refresh rooms"""
+        try:
+            rooms = self.teacher_handler.refresh_rooms()
+            # Update UI with new rooms
+            if hasattr(self.teacher_window, 'update_rooms'):
+                self.teacher_window.update_rooms(rooms)
+        except Exception as e:
+            self.show_error("Refresh Rooms Error", str(e))
+    
+    def handle_start_room(self, room_id):
+        """Handle start room"""
+        try:
+            result = self.teacher_handler.start_room(room_id)
+            
+            if result['success']:
+                from tkinter import messagebox
+                messagebox.showinfo("Success", "Test started successfully!")
+                # Refresh rooms to update status
+                self.handle_refresh_rooms()
+            else:
+                self.show_error("Start Room Error", result.get('message', 'Unknown error'))
+        except Exception as e:
+            self.show_error("Start Room Error", str(e))
+    
+    def handle_end_room(self, room_id):
+        """Handle end room"""
+        try:
+            result = self.teacher_handler.end_room(room_id)
+            
+            if result['success']:
+                from tkinter import messagebox
+                messagebox.showinfo("Success", "Test ended successfully!")
+                # Refresh rooms to update status
+                self.handle_refresh_rooms()
+            else:
+                self.show_error("End Room Error", result.get('message', 'Unknown error'))
+        except Exception as e:
+            self.show_error("End Room Error", str(e))
+    
+    def handle_add_question(self, room_id, question_text, option_a, option_b, option_c, option_d, correct_answer):
+        """Handle add question"""
+        try:
+            result = self.teacher_handler.add_question(
+                room_id, question_text, option_a, option_b, option_c, option_d, correct_answer
+            )
+            
+            if result['success']:
+                from tkinter import messagebox
+                messagebox.showinfo("Success", "Question added successfully!")
+                # Clear form and reload questions
+                self.teacher_window._clear_question_form()
+                self.handle_load_questions(room_id)
+            else:
+                self.show_error("Add Question Error", result.get('message', 'Unknown error'))
+        except Exception as e:
+            self.show_error("Add Question Error", str(e))
+    
+    def handle_load_questions(self, room_id):
+        """Handle load questions"""
+        try:
+            questions = self.teacher_handler.get_questions(room_id)
+            # Update UI with questions
+            if hasattr(self.teacher_window, 'update_questions'):
+                self.teacher_window.update_questions(questions)
+        except Exception as e:
+            self.show_error("Load Questions Error", str(e))
     
     def handle_logout(self):
         """Handle logout"""

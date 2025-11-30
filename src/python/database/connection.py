@@ -120,6 +120,23 @@ class Database:
             )
         ''')
         
+        # Room questions table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS room_questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                room_id INTEGER NOT NULL,
+                question_text TEXT NOT NULL,
+                option_a TEXT NOT NULL,
+                option_b TEXT NOT NULL,
+                option_c TEXT NOT NULL,
+                option_d TEXT NOT NULL,
+                correct_answer INTEGER NOT NULL CHECK(correct_answer BETWEEN 0 AND 3),
+                question_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (room_id) REFERENCES test_rooms(id) ON DELETE CASCADE
+            )
+        ''')
+        
         conn.commit()
         conn.close()
         

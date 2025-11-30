@@ -10,6 +10,9 @@ from protocol_wrapper import (
     MSG_REGISTER_RES, MSG_LOGIN_RES, MSG_TEST_CONFIG,
     MSG_TEST_START_RES, MSG_TEST_QUESTIONS, MSG_TEST_RESULT,
     MSG_TEACHER_DATA_RES, MSG_ERROR,
+    MSG_CREATE_ROOM_RES, MSG_GET_ROOMS_RES,
+    MSG_START_ROOM_RES, MSG_END_ROOM_RES,
+    MSG_ADD_QUESTION_RES, MSG_GET_QUESTIONS_RES, MSG_DELETE_QUESTION_RES,
     ERR_SUCCESS, ERR_BAD_REQUEST, ERR_INVALID_CREDS,
     ERR_USERNAME_EXISTS, ERR_INTERNAL
 )
@@ -292,4 +295,254 @@ class RequestHandlers:
                 self.send_error(client_socket, ERR_INTERNAL, str(e))
             except:
                 pass
+    
+    def handle_create_room(self, client_socket, session, request):
+        """Handle create room request"""
+        try:
+            payload = request.get('payload', {})
+            room_name = payload.get('room_name', '')
+            num_questions = payload.get('num_questions', 10)
+            duration_minutes = payload.get('duration_minutes', 30)
+            
+            # Validate
+            if not room_name or len(room_name) < 3:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Room name too short (min 3 characters)")
+                return
+            
+            if not (1 <= num_questions <= 50):
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Invalid number of questions (1-50)")
+                return
+            
+            if not (5 <= duration_minutes <= 180):
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Invalid duration (5-180 minutes)")
+                return
+            
+            # Get teacher user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # Create room
+            room_id, room_code = self.db.create_test_room(
+                room_name=room_name,
+                teacher_id=user['id'],
+                num_questions=num_questions,
+                duration_minutes=duration_minutes
+            )
+            
+            self.log(f"[OK] Room created: {room_name} ({room_code}) by {session['username']}")
+            
+            # Send success response
+            self.send_response(client_socket, MSG_CREATE_ROOM_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Room created successfully',
+                'data': {
+                    'room_id': room_id,
+                    'room_code': room_code
+                }
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Create room error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_get_rooms(self, client_socket, session, request):
+        """Handle get rooms request"""
+        try:
+            # Get teacher user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # Get teacher rooms
+            rooms = self.db.get_teacher_rooms(user['id'])
+            
+            self.log(f"[OK] Loaded {len(rooms)} rooms for {session['username']}")
+            
+            # Send response
+            self.send_response(client_socket, MSG_GET_ROOMS_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Rooms loaded',
+                'data': {
+                    'rooms': rooms
+                }
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Get rooms error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_start_room(self, client_socket, session, request):
+        """Handle start room request"""
+        try:
+            payload = request.get('payload', {})
+            room_id = payload.get('room_id')
+            
+            if not room_id:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Missing room_id")
+                return
+            
+            # Get teacher user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # Get room to verify ownership
+            room = self.db.get_room_by_code('')  # Need to add get_room_by_id
+            # For now, just update status
+            self.db.start_test_room(room_id)
+            
+            self.log(f"[OK] Room {room_id} started by {session['username']}")
+            
+            # Send response
+            self.send_response(client_socket, MSG_START_ROOM_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Room started successfully'
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Start room error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_end_room(self, client_socket, session, request):
+        """Handle end room request"""
+        try:
+            payload = request.get('payload', {})
+            room_id = payload.get('room_id')
+            
+            if not room_id:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Missing room_id")
+                return
+            
+            # Get teacher user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # End room
+            self.db.end_test_room(room_id)
+            
+            self.log(f"[OK] Room {room_id} ended by {session['username']}")
+            
+            # Send response
+            self.send_response(client_socket, MSG_END_ROOM_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Room ended successfully'
+            })
+            
+        except Exception as e:
+            self.log(f"✗ End room error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_add_question(self, client_socket, session, request):
+        """Handle add question request"""
+        try:
+            payload = request.get('payload', {})
+            room_id = payload.get('room_id')
+            question_text = payload.get('question_text', '')
+            option_a = payload.get('option_a', '')
+            option_b = payload.get('option_b', '')
+            option_c = payload.get('option_c', '')
+            option_d = payload.get('option_d', '')
+            correct_answer = payload.get('correct_answer', 0)
+            
+            # Validate
+            if not room_id:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Missing room_id")
+                return
+            
+            if not question_text or len(question_text) < 5:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Question text too short (min 5 characters)")
+                return
+            
+            if not all([option_a, option_b, option_c, option_d]):
+                self.send_error(client_socket, ERR_BAD_REQUEST, "All options must be provided")
+                return
+            
+            if correct_answer not in [0, 1, 2, 3]:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Invalid correct answer (must be 0-3)")
+                return
+            
+            # Add question to database
+            question_id = self.db.add_room_question(
+                room_id=room_id,
+                question_text=question_text,
+                option_a=option_a,
+                option_b=option_b,
+                option_c=option_c,
+                option_d=option_d,
+                correct_answer=correct_answer
+            )
+            
+            self.log(f"[OK] Question {question_id} added to room {room_id} by {session['username']}")
+            
+            # Send success response
+            self.send_response(client_socket, MSG_ADD_QUESTION_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Question added successfully',
+                'data': {
+                    'question_id': question_id
+                }
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Add question error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_get_questions(self, client_socket, session, request):
+        """Handle get questions request"""
+        try:
+            payload = request.get('payload', {})
+            room_id = payload.get('room_id')
+            
+            if not room_id:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Missing room_id")
+                return
+            
+            # Get questions from database
+            questions = self.db.get_room_questions(room_id)
+            
+            self.log(f"[OK] Loaded {len(questions)} questions for room {room_id}")
+            
+            # Send response
+            self.send_response(client_socket, MSG_GET_QUESTIONS_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Questions loaded',
+                'data': {
+                    'questions': questions
+                }
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Get questions error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_delete_question(self, client_socket, session, request):
+        """Handle delete question request"""
+        try:
+            payload = request.get('payload', {})
+            question_id = payload.get('question_id')
+            
+            if not question_id:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Missing question_id")
+                return
+            
+            # Delete question
+            self.db.delete_room_question(question_id)
+            
+            self.log(f"[OK] Question {question_id} deleted by {session['username']}")
+            
+            # Send response
+            self.send_response(client_socket, MSG_DELETE_QUESTION_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Question deleted successfully'
+            })
+            
+        except Exception as e:
+            self.log(f"✗ Delete question error: {str(e)}")
+            self.send_error(client_socket, ERR_INTERNAL, str(e))
 

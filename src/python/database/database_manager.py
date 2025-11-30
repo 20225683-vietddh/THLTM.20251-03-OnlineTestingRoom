@@ -97,6 +97,28 @@ class DatabaseManager:
         """Get student's rooms"""
         return self.rooms.get_student_rooms(student_id)
     
+    # ==================== ROOM QUESTIONS (Delegate to RoomRepository) ====================
+    
+    def add_room_question(self, room_id, question_text, option_a, option_b, option_c, option_d, correct_answer, question_order=0):
+        """Add question to room"""
+        return self.rooms.add_room_question(room_id, question_text, option_a, option_b, option_c, option_d, correct_answer, question_order)
+    
+    def get_room_questions(self, room_id):
+        """Get questions for a room"""
+        return self.rooms.get_room_questions(room_id)
+    
+    def update_room_question(self, question_id, question_text, option_a, option_b, option_c, option_d, correct_answer):
+        """Update room question"""
+        return self.rooms.update_room_question(question_id, question_text, option_a, option_b, option_c, option_d, correct_answer)
+    
+    def delete_room_question(self, question_id):
+        """Delete room question"""
+        return self.rooms.delete_room_question(question_id)
+    
+    def get_room_question_count(self, room_id):
+        """Get question count for room"""
+        return self.rooms.get_room_question_count(room_id)
+    
     # ==================== STATISTICS (Delegate to StatsRepository) ====================
     
     def get_statistics(self):

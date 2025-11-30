@@ -5,7 +5,14 @@ Handles teacher and student interface logic
 from protocol_wrapper import (
     MSG_TEACHER_DATA_RES, MSG_TEST_CONFIG, MSG_TEST_START_REQ,
     MSG_TEST_START_RES, MSG_TEST_QUESTIONS, MSG_TEST_SUBMIT,
-    MSG_TEST_RESULT, MSG_ERROR
+    MSG_TEST_RESULT, MSG_ERROR,
+    MSG_CREATE_ROOM_REQ, MSG_CREATE_ROOM_RES,
+    MSG_GET_ROOMS_REQ, MSG_GET_ROOMS_RES,
+    MSG_START_ROOM_REQ, MSG_START_ROOM_RES,
+    MSG_END_ROOM_REQ, MSG_END_ROOM_RES,
+    MSG_ADD_QUESTION_REQ, MSG_ADD_QUESTION_RES,
+    MSG_GET_QUESTIONS_REQ, MSG_GET_QUESTIONS_RES,
+    MSG_DELETE_QUESTION_REQ, MSG_DELETE_QUESTION_RES
 )
 
 
@@ -46,6 +53,208 @@ class TeacherHandler:
             
         except Exception as e:
             raise Exception(f"Failed to load teacher dashboard: {str(e)}")
+    
+    def create_room(self, room_name, num_questions, duration_minutes):
+        """Create a new test room"""
+        try:
+            # Send create room request
+            self.conn.send_message(MSG_CREATE_ROOM_REQ, {
+                'room_name': room_name,
+                'num_questions': num_questions,
+                'duration_minutes': duration_minutes
+            })
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_CREATE_ROOM_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    data = payload.get('data', {})
+                    return {
+                        'success': True,
+                        'room_id': data.get('room_id'),
+                        'room_code': data.get('room_code')
+                    }
+                else:
+                    return {'success': False, 'message': payload.get('message')}
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to create room: {str(e)}")
+    
+    def refresh_rooms(self):
+        """Refresh room list"""
+        try:
+            # Send get rooms request
+            self.conn.send_message(MSG_GET_ROOMS_REQ, {})
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_GET_ROOMS_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    data = payload.get('data', {})
+                    return data.get('rooms', [])
+                else:
+                    raise ValueError(payload.get('message', 'Failed to get rooms'))
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to refresh rooms: {str(e)}")
+    
+    def start_room(self, room_id):
+        """Start test in a room"""
+        try:
+            # Send start room request
+            self.conn.send_message(MSG_START_ROOM_REQ, {
+                'room_id': room_id
+            })
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_START_ROOM_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    return {'success': True}
+                else:
+                    return {'success': False, 'message': payload.get('message')}
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to start room: {str(e)}")
+    
+    def end_room(self, room_id):
+        """End test in a room"""
+        try:
+            # Send end room request
+            self.conn.send_message(MSG_END_ROOM_REQ, {
+                'room_id': room_id
+            })
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_END_ROOM_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    return {'success': True}
+                else:
+                    return {'success': False, 'message': payload.get('message')}
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to end room: {str(e)}")
+    
+    def add_question(self, room_id, question_text, option_a, option_b, option_c, option_d, correct_answer):
+        """Add a question to a room"""
+        try:
+            # Send add question request
+            self.conn.send_message(MSG_ADD_QUESTION_REQ, {
+                'room_id': room_id,
+                'question_text': question_text,
+                'option_a': option_a,
+                'option_b': option_b,
+                'option_c': option_c,
+                'option_d': option_d,
+                'correct_answer': correct_answer
+            })
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_ADD_QUESTION_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    return {'success': True, 'question_id': payload.get('data', {}).get('question_id')}
+                else:
+                    return {'success': False, 'message': payload.get('message')}
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to add question: {str(e)}")
+    
+    def get_questions(self, room_id):
+        """Get questions for a room"""
+        try:
+            # Send get questions request
+            self.conn.send_message(MSG_GET_QUESTIONS_REQ, {
+                'room_id': room_id
+            })
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_GET_QUESTIONS_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    data = payload.get('data', {})
+                    return data.get('questions', [])
+                else:
+                    raise ValueError(payload.get('message', 'Failed to get questions'))
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to get questions: {str(e)}")
+    
+    def delete_question(self, question_id):
+        """Delete a question"""
+        try:
+            # Send delete question request
+            self.conn.send_message(MSG_DELETE_QUESTION_REQ, {
+                'question_id': question_id
+            })
+            
+            # Receive response
+            response = self.conn.receive_message()
+            
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            if response['message_type'] == MSG_DELETE_QUESTION_RES:
+                payload = response['payload']
+                if payload.get('code') == 1000:  # ERR_SUCCESS
+                    return {'success': True}
+                else:
+                    return {'success': False, 'message': payload.get('message')}
+            
+            raise ValueError("Unexpected response")
+            
+        except Exception as e:
+            raise Exception(f"Failed to delete question: {str(e)}")
 
 
 class StudentHandler:
