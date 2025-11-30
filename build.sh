@@ -24,11 +24,21 @@ echo "Compiling C library..."
 
 if [ "$OS_TYPE" = "Darwin" ]; then
     # macOS
-    gcc -Wall -O2 -fPIC -dynamiclib src/network/network.c src/network/python_wrapper.c -o lib/libnetwork.dylib
+    gcc -Wall -O2 -fPIC -dynamiclib \
+        src/network/core/socket_ops.c \
+        src/network/core/protocol.c \
+        src/network/core/utils.c \
+        src/network/python_wrapper.c \
+        -o lib/libnetwork.dylib -I src/network
     LIB_FILE="lib/libnetwork.dylib"
 else
     # Linux
-    gcc -Wall -O2 -fPIC -shared src/network/network.c src/network/python_wrapper.c -o lib/libnetwork.so
+    gcc -Wall -O2 -fPIC -shared \
+        src/network/core/socket_ops.c \
+        src/network/core/protocol.c \
+        src/network/core/utils.c \
+        src/network/python_wrapper.c \
+        -o lib/libnetwork.so -I src/network
     LIB_FILE="lib/libnetwork.so"
 fi
 
@@ -51,4 +61,3 @@ else
     echo "================================================"
     exit 1
 fi
-

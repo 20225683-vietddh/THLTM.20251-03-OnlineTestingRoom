@@ -24,17 +24,7 @@ Dự án **Online Multiple Choice Testing Application** - Ứng dụng thi trắ
 - **Protocol**: TAP (Test Application Protocol) v1.0 - Binary protocol with structured headers
 - **Database**: SQLite với separated repositories (User, Test, Room, Stats)
 
-### ⭐ Features v2.0
-
-- ✅ **Clean Architecture**: Modular design, mỗi module < 300 dòng
-- ✅ **Room Management**: Teacher tạo phòng thi, học sinh join bằng code
-- ✅ **Real-time Control**: Teacher kiểm soát start/end test
-- ✅ **Role-based Access**: Student vs Teacher interfaces
-- ✅ **Session Management**: Token-based authentication
-- ✅ **Statistics Dashboard**: Real-time stats cho teacher
-- ✅ **Repository Pattern**: Separated database operations
-
-### TAP Protocol v1.0
+### TAP Protocol v1.00
 
 Dự án sử dụng **custom binary protocol**:
 
@@ -88,11 +78,20 @@ CLIENT (client/)                       SERVER (server/)
          │                                    │
          │                                    │
     ┌────▼────────────────────────────────────▼────┐
-    │         C Network Layer (network.dll)        │
-    │  - Socket operations (create, connect, send) │
-    │  - Protocol functions (send/receive header)  │
-    │  - Binary header packing/unpacking           │
-    └──────────────────────────────────────────────┘
+    │      C Network Layer (network.dll)          │
+    │  ┌──────────────────────────────────────┐   │
+    │  │ Application Layer (protocol.c)       │   │
+    │  │  - TAP Protocol implementation       │   │
+    │  │  - Message framing & validation      │   │
+    │  ├──────────────────────────────────────┤   │
+    │  │ Transport Layer (socket_ops.c)       │   │
+    │  │  - TCP socket operations             │   │
+    │  │  - Connection management             │   │
+    │  ├──────────────────────────────────────┤   │
+    │  │ Utilities (utils.c)                  │   │
+    │  │  - Message ID, timestamps            │   │
+    │  └──────────────────────────────────────┘   │
+    └─────────────────────────────────────────────┘
     
     ┌─────────────────────────────────────────────┐
     │    Database Layer (database/ package)        │
@@ -270,6 +269,90 @@ CLIENT (teacher_window)               SERVER
 
 ---
 
+## 🏗️ C Network Architecture (Layered Design)
+
+### **Network Programming Principles**
+
+Code C được refactor theo **OSI Model layers** để dễ hiểu và maintain:
+
+```
+┌──────────────────────────────────────────────────────┐
+│           APPLICATION LAYER (Layer 7)                │
+│  ┌────────────────────────────────────────────────┐  │
+│  │ protocol.h / protocol.c                        │  │
+│  │ • TAP Protocol implementation                  │  │
+│  │ • Message types & error codes                  │  │
+│  │ • Header structure (64 bytes fixed)            │  │
+│  │ • protocol_send_message()                      │  │
+│  │ • protocol_receive_message()                   │  │
+│  │ • protocol_validate_header()                   │  │
+│  └────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
+                         ↕
+┌──────────────────────────────────────────────────────┐
+│           TRANSPORT LAYER (Layer 4)                  │
+│  ┌────────────────────────────────────────────────┐  │
+│  │ socket_ops.h / socket_ops.c                    │  │
+│  │ • TCP socket operations                        │  │
+│  │ • socket_create_server() - Server setup       │  │
+│  │ • socket_accept_client() - Accept connections │  │
+│  │ • socket_connect_to_server() - Client connect │  │
+│  │ • socket_send_data() - Send raw bytes         │  │
+│  │ • socket_receive_data() - Receive raw bytes   │  │
+│  │ • socket_close() - Close connection            │  │
+│  └────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
+                         ↕
+┌──────────────────────────────────────────────────────┐
+│              UTILITIES                               │
+│  ┌────────────────────────────────────────────────┐  │
+│  │ utils.h / utils.c                              │  │
+│  │ • utils_generate_message_id()                  │  │
+│  │ • utils_get_unix_timestamp()                   │  │
+│  └────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
+                         ↕
+┌──────────────────────────────────────────────────────┐
+│              PYTHON INTERFACE                        │
+│  ┌────────────────────────────────────────────────┐  │
+│  │ python_wrapper.c                               │  │
+│  │ • py_init_network()                            │  │
+│  │ • py_create_server()                           │  │
+│  │ • py_send_protocol_message()                   │  │
+│  │ • py_receive_protocol_message()                │  │
+│  └────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
+```
+
+### **Why This Structure?**
+
+✅ **Separation of Concerns**: Mỗi layer có responsibility riêng
+✅ **Testability**: Test từng layer độc lập
+✅ **Educational**: Rõ ràng Transport vs Application layer
+✅ **Maintainability**: Dễ debug và extend
+✅ **Professional**: Follow industry best practices
+
+### **Key Network Programming Concepts Demonstrated:**
+
+1. **Transport Layer (socket_ops.c)**:
+   - TCP 3-way handshake (SYN, SYN-ACK, ACK)
+   - Connection termination (FIN, ACK)
+   - Blocking I/O operations
+   - Socket address structures
+
+2. **Application Layer (protocol.c)**:
+   - Custom protocol design
+   - Message framing (fixed header + variable payload)
+   - Network byte order (Big-endian)
+   - Protocol versioning
+
+3. **Cross-platform Compatibility**:
+   - Windows (Winsock2) vs UNIX sockets
+   - Platform-specific error handling
+   - Portable data types (uint32_t, socket_t)
+
+---
+
 ## Cấu trúc dự án
 
 ### 📂 Clean Architecture (Django-style)
@@ -277,10 +360,24 @@ CLIENT (teacher_window)               SERVER
 ```
 Project/
 ├── src/
-│   ├── network/                    # C Network Layer (DLL)
-│   │   ├── network.h               # Header file & protocol constants
-│   │   ├── network.c               # TCP/IP socket implementation
-│   │   └── python_wrapper.c        # Python ctypes wrapper
+│   ├── network/                    # C Network Layer (Clean Architecture)
+│   │   ├── core/                   # Core modules (layered design)
+│   │   │   ├── socket_ops.h        # Transport Layer (TCP/IP)
+│   │   │   ├── socket_ops.c        #   - Socket creation & management
+│   │   │   │                       #   - Connection establishment
+│   │   │   │                       #   - Raw data transmission
+│   │   │   │
+│   │   │   ├── protocol.h          # Application Layer (TAP Protocol)
+│   │   │   ├── protocol.c          #   - Message framing
+│   │   │   │                       #   - Header packing/unpacking
+│   │   │   │                       #   - Protocol validation
+│   │   │   │
+│   │   │   ├── utils.h             # Utilities
+│   │   │   └── utils.c             #   - Message ID generation
+│   │   │                           #   - Unix timestamp
+│   │   │
+│   │   ├── network.h               # Main header (includes all)
+│   │   └── python_wrapper.c        # Python ctypes interface
 │   │
 │   └── python/                     # Python Application Layer
 │       │
@@ -347,17 +444,6 @@ Project/
 └── PROTOCOL_SPEC.md            # 📋 Protocol technical spec
 ```
 
-### 📊 Module Statistics
-
-| Module | Files | Total Lines | Avg per File |
-|--------|-------|-------------|--------------|
-| **server/** | 6 files | ~1,215 lines | ~202 lines |
-| **client/** | 4 files | ~547 lines | ~137 lines |
-| **database/** | 6 files | ~732 lines | ~122 lines |
-| **auth/** | 2 files | ~200 lines | ~100 lines |
-| **ui/** | 4 files | ~800 lines | ~200 lines |
-
-**Total: ~3,500 lines** across **22 modular files** ✅
 
 ---
 
@@ -383,20 +469,32 @@ Project/
 
 ### Bước 1️⃣: Build thư viện C
 
+**Build script tự động:**
+- Detect Python architecture (32-bit/64-bit)
+- Compile all core modules
+- Link into single shared library (.dll/.so/.dylib)
+
 #### Windows:
 ```bash
 ./build.bat
 ```
+Compiles:
+- `core/socket_ops.c` → TCP socket layer
+- `core/protocol.c` → TAP protocol layer  
+- `core/utils.c` → Utility functions
+- `python_wrapper.c` → Python bindings
+→ Output: `lib/network.dll`
 
 #### Linux/macOS:
 ```bash
 chmod +x build.sh
 ./build.sh
 ```
+→ Output: `lib/libnetwork.so` (Linux) hoặc `lib/libnetwork.dylib` (macOS)
 
-Hoặc sử dụng Makefile:
+#### Hoặc sử dụng Makefile:
 ```bash
-make           # Build
+make           # Build all modules
 make clean     # Clean build artifacts
 make rebuild   # Clean and rebuild
 ```
@@ -448,68 +546,6 @@ Server tự động:
 python src/python/client/main.py
 ```
 
----
-
-## 📖 Hướng dẫn sử dụng
-
-### **👤 Đăng ký (lần đầu):**
-1. Click **"Register"**
-2. Chọn role: **Student** hoặc **Teacher**
-3. Nhập thông tin đầy đủ
-4. Click **"Register"** → Đăng ký thành công
-
-### **🔐 Đăng nhập:**
-1. Chọn role: **Student** hoặc **Teacher**
-2. Nhập username và password
-3. Click **"Login"**
-
----
-
-### **👨‍🎓 Student - Làm bài thi:**
-
-**Cách 1: Direct Test (Legacy)**
-1. Login → Xem thông tin bài thi
-2. Click **"Start Test"**
-3. Trả lời câu hỏi (Next/Previous)
-4. Click **"Submit Test"**
-5. Xem kết quả
-
-**Cách 2: Room-based Test** ⭐ NEW
-1. Login → Vào Room Lobby
-2. Nhập **Room Code** (6 ký tự từ teacher)
-3. Click **"Join Room"**
-4. Đợi teacher bắt đầu bài thi
-5. Làm bài và submit
-
----
-
-### **👨‍🏫 Teacher - Dashboard & Room Management:**
-
-**Tab 1: 📊 Test Results**
-- Xem tất cả kết quả thi
-- Thống kê (average, max, min scores)
-- Chi tiết từng học sinh
-
-**Tab 2: 🏫 Test Rooms** ⭐ NEW
-1. **Tạo phòng thi:**
-   - Nhập tên phòng
-   - Chọn số câu hỏi (1-50)
-   - Chọn thời gian (5-180 phút)
-   - Click **"Create Room"**
-   - Nhận **Room Code** (VD: ABC123)
-
-2. **Quản lý phòng:**
-   - Xem danh sách phòng thi
-   - Trạng thái: ⏳ Waiting | ▶️ Active | ✅ Ended
-   - Số lượng học sinh tham gia
-   - Start/End controls (coming soon)
-
-3. **Chia sẻ Room Code với học sinh**
-   - Học sinh nhập code để vào phòng
-   - Teacher kiểm soát khi nào bắt đầu/kết thúc
-
----
-
 ## **Testing/Demo Mode (Đơn giản - không auth)**
 
 ### **Demo Server (no auth):**
@@ -527,39 +563,3 @@ python src/python/tests/test_client.py
 - ✅ Test C library
 - ✅ Học network programming cơ bản
 - ✅ Debug network issues
-
----
-
-## Tùy chỉnh câu hỏi
-
-### Chỉnh sửa file `src/python/questions.json`:
-
-```json
-{
-  "duration": 10,
-  "questions": [
-    {
-      "id": 1,
-      "question": "Câu hỏi của bạn?",
-      "options": [
-        "Đáp án A",
-        "Đáp án B",
-        "Đáp án C",
-        "Đáp án D"
-      ],
-      "answer": 0
-    }
-  ]
-}
-```
-
-**Giải thích:**
-- `duration`: Thời gian làm bài (phút)
-- `id`: ID duy nhất của câu hỏi
-- `question`: Nội dung câu hỏi
-- `options`: Mảng 4 đáp án
-- `answer`: Index của đáp án đúng (0 = A, 1 = B, 2 = C, 3 = D)
-
-**File mẫu** đã có sẵn 10 câu hỏi về Network Programming!
-
----

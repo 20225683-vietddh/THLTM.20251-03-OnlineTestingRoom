@@ -35,7 +35,12 @@ if "%PYTHON_BITS%"=="64" (
 REM Compile the shared library
 echo.
 echo Compiling C library...
-gcc -Wall -O2 %ARCH_FLAG% -shared src/network/network.c src/network/python_wrapper.c -o lib/network.dll -lws2_32
+gcc -Wall -O2 %ARCH_FLAG% -shared ^
+    src/network/core/socket_ops.c ^
+    src/network/core/protocol.c ^
+    src/network/core/utils.c ^
+    src/network/python_wrapper.c ^
+    -o lib/network.dll -lws2_32 -I src/network
 
 if %ERRORLEVEL% EQU 0 (
     echo.
@@ -57,4 +62,3 @@ if %ERRORLEVEL% EQU 0 (
 )
 
 pause
-

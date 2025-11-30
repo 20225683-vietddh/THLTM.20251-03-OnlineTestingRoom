@@ -1,72 +1,45 @@
 #include "network.h"
 
-// Python wrapper functions for easier ctypes integration
+// ==================== PYTHON API IMPLEMENTATION ====================
 
-// Export functions for Windows DLL
-#ifdef _WIN32
-    #define EXPORT __declspec(dllexport)
-#else
-    #define EXPORT
-#endif
-
-EXPORT int py_init_network() {
-    return init_network();
+int py_init_network(void) {
+    return socket_init_network();
 }
 
-EXPORT void py_cleanup_network() {
-    cleanup_network();
+void py_cleanup_network(void) {
+    socket_cleanup_network();
 }
 
-EXPORT socket_t py_create_server(int port) {
-    return create_server_socket(port);
+socket_t py_create_server(int port) {
+    return socket_create_server(port);
 }
 
-EXPORT socket_t py_accept_client(socket_t server_socket) {
-    return accept_client(server_socket);
+socket_t py_accept_client(socket_t server_socket) {
+    return socket_accept_client(server_socket);
 }
 
-EXPORT socket_t py_connect_to_server(const char* host, int port) {
-    return connect_to_server(host, port);
+socket_t py_connect_to_server(const char* host, int port) {
+    return socket_connect_to_server(host, port);
 }
 
-EXPORT int py_send_message(socket_t socket, const char* message) {
-    return send_message(socket, message);
+void py_close_socket(socket_t socket) {
+    socket_close(socket);
 }
 
-EXPORT int py_receive_message(socket_t socket, char* buffer, int buffer_size) {
-    return receive_message(socket, buffer, buffer_size);
+int py_send_protocol_message(socket_t socket, uint16_t msg_type,
+                              const char* payload, const char* session_token) {
+    return protocol_send_message(socket, msg_type, payload, session_token);
 }
 
-EXPORT void py_close_socket(socket_t socket) {
-    close_socket(socket);
+int py_receive_protocol_message(socket_t socket, protocol_header_t* header,
+                                 char* payload, int max_payload_size) {
+    return protocol_receive_message(socket, header, payload, max_payload_size);
 }
 
-// ==================== PROTOCOL FUNCTIONS (New) ====================
-
-EXPORT int py_send_protocol_message(socket_t socket, uint16_t msg_type, 
-                                    const char* payload, const char* session_token) {
-    return send_protocol_message(socket, msg_type, payload, session_token);
+void py_generate_message_id(char* message_id) {
+    utils_generate_message_id(message_id);
 }
 
-EXPORT int py_receive_protocol_message(socket_t socket, protocol_header_t* header,
-                                       char* payload, int max_payload_size) {
-    return receive_protocol_message(socket, header, payload, max_payload_size);
+int64_t py_get_unix_timestamp(void) {
+    return utils_get_unix_timestamp();
 }
-
-EXPORT void py_init_protocol_header(protocol_header_t* header, uint16_t msg_type,
-                                    uint32_t length, const char* session_token) {
-    init_protocol_header(header, msg_type, length, session_token);
-}
-
-EXPORT int py_validate_protocol_header(protocol_header_t* header) {
-    return validate_protocol_header(header);
-}
-
-EXPORT void py_generate_message_id(char* message_id) {
-    generate_message_id(message_id);
-}
-
-EXPORT int64_t py_get_unix_timestamp() {
-    return get_unix_timestamp();
-}
-

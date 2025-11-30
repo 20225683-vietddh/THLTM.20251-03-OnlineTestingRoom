@@ -7,11 +7,20 @@ CFLAGS = -Wall -O2 -fPIC
 
 # Directories
 SRC_DIR = src/network
+CORE_DIR = $(SRC_DIR)/core
 LIB_DIR = lib
 
 # Source files
-SOURCES = $(SRC_DIR)/network.c $(SRC_DIR)/python_wrapper.c
-HEADERS = $(SRC_DIR)/network.h
+SOURCES = $(CORE_DIR)/socket_ops.c \
+          $(CORE_DIR)/protocol.c \
+          $(CORE_DIR)/utils.c \
+          $(SRC_DIR)/python_wrapper.c
+
+# Header files
+HEADERS = $(CORE_DIR)/socket_ops.h \
+          $(CORE_DIR)/protocol.h \
+          $(CORE_DIR)/utils.h \
+          $(SRC_DIR)/network.h
 
 # Detect OS
 ifeq ($(OS),Windows_NT)
@@ -60,4 +69,3 @@ endif
 rebuild: clean all
 
 .PHONY: all clean rebuild
-
