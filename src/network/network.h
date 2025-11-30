@@ -5,6 +5,7 @@
 #include "core/socket_ops.h"
 #include "core/protocol.h"
 #include "core/utils.h"
+#include "core/thread_pool.h"
 
 // ==================== VERSION INFO ====================
 

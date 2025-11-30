@@ -53,54 +53,248 @@ CLIENT (client/)                       SERVER (server/)
 │  CustomTkinter  │                    │  CustomTkinter   │
 │      GUI        │                    │    GUI (Admin)   │
 ├─────────────────┤                    ├──────────────────┤
-│ client_app.py   │                    │  server_gui.py   │
-│  (Main App)     │                    │  (Main Server)   │
-│                 │                    │                  │
-│ handlers.py     │                    │  handlers.py     │
-│  - Teacher      │                    │  - Registration  │
-│  - Student      │                    │  - Login/Auth    │
-│                 │                    │  - Test grading  │
-│ connection.py   │                    │                  │
-│  - TCP Client   │                    │  room_manager.py │
-│  - Protocol     │                    │  - Room CRUD     │
-│                 │                    │  - Start/End     │
-│ ui/             │                    │                  │
-│  - Windows      │                    │  client_handler  │
-│                 │                    │  - Routing       │
 ├─────────────────┤                    ├──────────────────┤
 │                 │    TCP Socket      │                  │
 │ protocol_wrapper│◄──────────────────►│ protocol_wrapper │
 │    (Python)     │   TAP Protocol     │    (Python)      │
 │                 │   Port: 5555       │                  │
 ├─────────────────┤                    ├──────────────────┤
-│   ctypes        │                    │    ctypes        │
+│   ctypes FFI    │                    │    ctypes FFI    │
+│  (Python ↔ C)   │                    │   (Python ↔ C)   │
 └────────┬────────┘                    └─────────┬────────┘
-         │                                    │
-         │                                    │
+         │  Load DLL/SO                       │  Load DLL/SO
+         │  Call C functions                  │  Call C functions
     ┌────▼────────────────────────────────────▼────┐
-    │      C Network Layer (network.dll)          │
-    │  ┌──────────────────────────────────────┐   │
-    │  │ Application Layer (protocol.c)       │   │
-    │  │  - TAP Protocol implementation       │   │
-    │  │  - Message framing & validation      │   │
-    │  ├──────────────────────────────────────┤   │
-    │  │ Transport Layer (socket_ops.c)       │   │
-    │  │  - TCP socket operations             │   │
-    │  │  - Connection management             │   │
-    │  ├──────────────────────────────────────┤   │
-    │  │ Utilities (utils.c)                  │   │
-    │  │  - Message ID, timestamps            │   │
-    │  └──────────────────────────────────────┘   │
+    │  C Network Layer (network.dll/libnetwork.so) │
+    │  ┌──────────────────────────────────────┐    │
+    │  │ Python Wrapper (python_wrapper.c)    │    │
+    │  │  - py_create_server()                │    │
+    │  │  - py_connect_to_server()            │    │
+    │  │  - py_send_protocol_message()        │    │
+    │  │  - py_receive_protocol_message()     │    │
+    │  ├──────────────────────────────────────┤    │
+    │  │ Application Layer (protocol.c/h)     │    │
+    │  │  - TAP Protocol implementation       │    │
+    │  │  - Message framing & validation      │    │
+    │  │  - Stream handling (fixed header)    │    │
+    │  ├──────────────────────────────────────┤    │
+    │  │ Transport Layer (socket_ops.c/h)     │    │
+    │  │  - TCP socket operations             │    │
+    │  │  - Connection management             │    │
+    │  │  - Blocking I/O (send/recv loop)     │    │
+    │  ├──────────────────────────────────────┤    │
+    │  │ Concurrency (thread_pool.c/h)        │    │
+    │  │  - Multi-threading (Windows/POSIX)   │    │
+    │  │  - Thread-per-client model           │    │
+    │  │  - Mutex synchronization             │    │
+    │  ├──────────────────────────────────────┤    │
+    │  │ Utilities (utils.c/h)                │    │
+    │  │  - Message ID, timestamps            │    │
+    │  └──────────────────────────────────────┘    │
     └─────────────────────────────────────────────┘
     
     ┌─────────────────────────────────────────────┐
-    │    Database Layer (database/ package)        │
-    │  - user_repository (User CRUD)               │
-    │  - test_repository (Test results)            │
-    │  - room_repository (Rooms & participants)    │
-    │  - stats_repository (Statistics)             │
+    │    Database Layer (database/ package)        │        
     └──────────────────────────────────────────────┘
 ```
+
+---
+
+## 🔗 Python-C Integration (ctypes FFI)
+
+### **Thư viện: `ctypes` (Python Standard Library)**
+
+**ctypes** cho phép Python gọi C functions từ compiled library:
+- ✅ Load DLL/SO files
+- ✅ Define C function signatures  
+- ✅ Convert Python ↔ C types
+- ✅ No compilation needed for Python code
+
+### **How It Works**
+
+**Step 1: C Side - Export Functions**
+
+File: `src/network/python_wrapper.c`
+```c
+// Wrapper functions with "py_" prefix
+int py_connect_to_server(const char* host, int port) {
+    return socket_connect_to_server(host, port);
+}
+
+int py_send_protocol_message(socket_t socket, uint16_t msg_type,
+                              const char* payload, const char* token) {
+    return protocol_send_message(socket, msg_type, payload, token);
+}
+```
+Compile → `lib/network.dll` (Windows) / `lib/libnetwork.so` (Linux)
+
+**Step 2: Python Side - Load & Call**
+
+File: `src/python/protocol_wrapper.py`
+```python
+import ctypes
+
+# 1. Load C library
+lib = ctypes.CDLL("lib/network.dll")
+
+# 2. Define signatures
+lib.py_connect_to_server.argtypes = [ctypes.c_char_p, ctypes.c_int]
+lib.py_connect_to_server.restype = ctypes.c_int64
+
+lib.py_send_protocol_message.argtypes = [
+    ctypes.c_int64,   # socket
+    ctypes.c_uint16,  # msg_type
+    ctypes.c_char_p,  # payload
+    ctypes.c_char_p   # token
+]
+lib.py_send_protocol_message.restype = ctypes.c_int
+
+# 3. Call C functions
+socket = lib.py_connect_to_server(b"127.0.0.1", 5555)
+result = lib.py_send_protocol_message(socket, 0x0003, b'{"user":"test"}', b"token")
+```
+
+### **Type Conversion**
+
+| Python | ctypes | C |
+|--------|--------|---|
+| `bytes` | `c_char_p` | `const char*` |
+| `str.encode()` | `c_char_p` | `char*` |
+| `int` | `c_int` | `int` |
+| `int` | `c_uint16` | `uint16_t` |
+| `int` (socket) | `c_int64` (Win) / `c_int` (Linux) | `SOCKET` / `int` |
+
+### **C Struct → Python ctypes.Structure**
+
+**C (`protocol.h`):**
+```c
+typedef struct {
+    uint32_t magic;
+    uint16_t message_type;
+    uint32_t length;
+    char     session_token[32];
+} protocol_header_t;
+```
+
+**Python (`protocol_wrapper.py`):**
+```python
+class ProtocolHeader(ctypes.Structure):
+    _fields_ = [
+        ("magic", ctypes.c_uint32),
+        ("message_type", ctypes.c_uint16),
+        ("length", ctypes.c_uint32),
+        ("session_token", ctypes.c_char * 32)
+    ]
+```
+
+### **Complete Integration Flow**
+
+```
+Python GUI (student_window.py)
+    ↓ Event handler
+Python App (client_app.py)
+    ↓ Call method
+Python Handler (handlers.py)
+    ↓ Prepare data
+protocol_wrapper.py
+    ↓ ctypes FFI
+    lib.py_send_protocol_message(...)
+    ↓
+lib/network.dll (C compiled)
+    ↓ Python wrapper exports
+python_wrapper.c
+    ↓ Call internal functions
+protocol.c, socket_ops.c, thread_pool.c
+    ↓ System calls
+WinSock API / POSIX sockets
+```
+
+**Files:**
+- `src/network/python_wrapper.c` - C exports
+- `src/python/protocol_wrapper.py` - Python ctypes loader
+- `lib/network.dll` - Compiled C library
+
+---
+
+## 📊 System Architecture Details
+
+### **File Structure**
+
+```
+Project/
+├── lib/
+│   └── network.dll (libnetwork.so)     ← Compiled C library
+├── src/
+│   ├── network/                        ← C Network Layer (Core)
+│   │   ├── core/
+│   │   │   ├── socket_ops.c/h         ← TCP socket operations
+│   │   │   ├── protocol.c/h           ← TAP protocol (framing)
+│   │   │   ├── thread_pool.c/h        ← Multi-threading
+│   │   │   └── utils.c/h              ← Utilities
+│   │   ├── network.h                  ← Main header (includes all)
+│   │   └── python_wrapper.c           ← Python FFI exports
+│   └── python/                        ← Python Application Layer
+│       ├── protocol_wrapper.py        ← ctypes DLL loader
+│       ├── client/
+│       │   ├── main.py                ← Entry point (client)
+│       │   ├── client_app.py          ← Main client app
+│       │   ├── connection.py          ← Client TCP connection
+│       │   ├── handlers.py            ← Client-side business logic
+│       │   └── ui/                    ← GUI (customtkinter)
+│       │       ├── login_window.py
+│       │       ├── register_window.py
+│       │       ├── student_window.py
+│       │       └── teacher_window.py
+│       ├── server/
+│       │   ├── main.py                ← Entry point (server)
+│       │   ├── server_gui.py          ← Main server app (admin GUI)
+│       │   ├── client_handler.py      ← Request routing
+│       │   ├── handlers.py            ← Server-side business logic
+│       │   └── room_manager.py        ← Room management
+│       ├── database/
+│       │   ├── database_manager.py    ← Facade pattern
+│       │   ├── connection.py          ← SQLite connection
+│       │   ├── user_repository.py     ← User CRUD
+│       │   ├── test_repository.py     ← Test CRUD
+│       │   ├── room_repository.py     ← Room CRUD
+│       │   └── stats_repository.py    ← Statistics
+│       └── auth/
+│           ├── auth.py                ← Password hashing (PBKDF2)
+│           └── session.py             ← Token management
+├── data/
+│   └── app.db                         ← SQLite database
+├── Makefile / build.bat / build.sh    ← Build scripts
+├── requirements.txt                   ← Python dependencies
+├── README.md                          ← Project documentation
+├── PROTOCOL_SPEC.md                   ← TAP protocol specification
+└── NETWORK_IMPLEMENTATION.md          ← Network programming details
+```
+
+### **Layer Responsibilities**
+
+| Layer | Technology | Files | Responsibilities |
+|-------|-----------|-------|------------------|
+| **Presentation** | Python `customtkinter` | `ui/*.py` | User interface, forms, event handling |
+| **Application** | Python | `client_app.py`<br>`server_gui.py`<br>`handlers.py` | Business logic, validation, orchestration |
+| **Protocol** | Python `ctypes` + C | `protocol_wrapper.py`<br>`protocol.c/h` | Message framing, serialization, TAP protocol |
+| **Network** | C | `socket_ops.c/h`<br>`thread_pool.c/h` | TCP/IP, socket I/O, multi-threading |
+| **Database** | Python `sqlite3` | `database/*.py` | Data persistence, CRUD, repositories |
+| **Authentication** | Python | `auth/*.py` | Password hashing, token management |
+
+### **Technology Stack**
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **Network Layer** | C (socket API) | Low-level TCP/IP, performance-critical |
+| **Protocol** | C + Python ctypes | Binary protocol implementation |
+| **GUI** | Python customtkinter | Modern, cross-platform UI |
+| **Business Logic** | Python | Application logic, easier to maintain |
+| **Database** | SQLite3 | Lightweight, embedded database |
+| **Authentication** | PBKDF2 (hashlib) | Secure password hashing |
+| **FFI** | ctypes | Python ↔ C integration |
+| **Build** | gcc / MSVC | Compile C to DLL/SO |
+
+---
 
 ### **2️⃣ Luồng đăng ký & đăng nhập**
 

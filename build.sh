@@ -28,8 +28,9 @@ if [ "$OS_TYPE" = "Darwin" ]; then
         src/network/core/socket_ops.c \
         src/network/core/protocol.c \
         src/network/core/utils.c \
+        src/network/core/thread_pool.c \
         src/network/python_wrapper.c \
-        -o lib/libnetwork.dylib -I src/network
+        -o lib/libnetwork.dylib -I src/network -lpthread
     LIB_FILE="lib/libnetwork.dylib"
 else
     # Linux
@@ -37,8 +38,9 @@ else
         src/network/core/socket_ops.c \
         src/network/core/protocol.c \
         src/network/core/utils.c \
+        src/network/core/thread_pool.c \
         src/network/python_wrapper.c \
-        -o lib/libnetwork.so -I src/network
+        -o lib/libnetwork.so -I src/network -lpthread
     LIB_FILE="lib/libnetwork.so"
 fi
 

@@ -14,12 +14,14 @@ LIB_DIR = lib
 SOURCES = $(CORE_DIR)/socket_ops.c \
           $(CORE_DIR)/protocol.c \
           $(CORE_DIR)/utils.c \
+          $(CORE_DIR)/thread_pool.c \
           $(SRC_DIR)/python_wrapper.c
 
 # Header files
 HEADERS = $(CORE_DIR)/socket_ops.h \
           $(CORE_DIR)/protocol.h \
           $(CORE_DIR)/utils.h \
+          $(CORE_DIR)/thread_pool.h \
           $(SRC_DIR)/network.h
 
 # Detect OS
