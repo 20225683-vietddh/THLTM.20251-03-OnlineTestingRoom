@@ -1,4 +1,5 @@
 # Online Multiple Choice Test Application
+
 ## Network Programming Project
 
 <div align="center">
@@ -24,12 +25,12 @@ Dự án **Online Multiple Choice Testing Application** - Ứng dụng thi trắ
 - **Protocol**: TAP (Test Application Protocol) v1.0 - Binary protocol with structured headers
 - **Database**: SQLite với separated repositories (User, Test, Room, Stats)
 
-### TAP Protocol v1.00
+### TAP Protocol v1.0
 
 Dự án sử dụng **custom binary protocol**:
 
-- **Binary Header (64 bytes)**: Magic number, version, message type, length, message ID, timestamp, session token
-- **Message Types**: 16 message type codes cho các operations khác nhau
+- **Binary Header (88 bytes)**: Magic number, version, message type, length, message ID, timestamp, session token
+- **Message Types**: 27 message type codes cho các operations khác nhau
 - **Error Codes**: Structured error codes (1000-6000 range)
 - **Session Management**: Token-based authentication trong header
 - **Versioning**: Protocol version field để hỗ trợ future upgrades
@@ -92,9 +93,9 @@ CLIENT (client/)                       SERVER (server/)
     │  │  - Message ID, timestamps            │    │
     │  └──────────────────────────────────────┘    │
     └─────────────────────────────────────────────┘
-    
+
     ┌─────────────────────────────────────────────┐
-    │    Database Layer (database/ package)        │        
+    │    Database Layer (database/ package)        │
     └──────────────────────────────────────────────┘
 ```
 
@@ -105,8 +106,9 @@ CLIENT (client/)                       SERVER (server/)
 ### **Thư viện: `ctypes` (Python Standard Library)**
 
 **ctypes** cho phép Python gọi C functions từ compiled library:
+
 - ✅ Load DLL/SO files
-- ✅ Define C function signatures  
+- ✅ Define C function signatures
 - ✅ Convert Python ↔ C types
 - ✅ No compilation needed for Python code
 
@@ -115,6 +117,7 @@ CLIENT (client/)                       SERVER (server/)
 **Step 1: C Side - Export Functions**
 
 File: `src/network/python_wrapper.c`
+
 ```c
 // Wrapper functions with "py_" prefix
 int py_connect_to_server(const char* host, int port) {
@@ -126,11 +129,13 @@ int py_send_protocol_message(socket_t socket, uint16_t msg_type,
     return protocol_send_message(socket, msg_type, payload, token);
 }
 ```
+
 Compile → `lib/network.dll` (Windows) / `lib/libnetwork.so` (Linux)
 
 **Step 2: Python Side - Load & Call**
 
 File: `src/python/protocol_wrapper.py`
+
 ```python
 import ctypes
 
@@ -156,17 +161,18 @@ result = lib.py_send_protocol_message(socket, 0x0003, b'{"user":"test"}', b"toke
 
 ### **Type Conversion**
 
-| Python | ctypes | C |
-|--------|--------|---|
-| `bytes` | `c_char_p` | `const char*` |
-| `str.encode()` | `c_char_p` | `char*` |
-| `int` | `c_int` | `int` |
-| `int` | `c_uint16` | `uint16_t` |
+| Python         | ctypes                            | C                |
+| -------------- | --------------------------------- | ---------------- |
+| `bytes`        | `c_char_p`                        | `const char*`    |
+| `str.encode()` | `c_char_p`                        | `char*`          |
+| `int`          | `c_int`                           | `int`            |
+| `int`          | `c_uint16`                        | `uint16_t`       |
 | `int` (socket) | `c_int64` (Win) / `c_int` (Linux) | `SOCKET` / `int` |
 
 ### **C Struct → Python ctypes.Structure**
 
 **C (`protocol.h`):**
+
 ```c
 typedef struct {
     uint32_t magic;
@@ -177,6 +183,7 @@ typedef struct {
 ```
 
 **Python (`protocol_wrapper.py`):**
+
 ```python
 class ProtocolHeader(ctypes.Structure):
     _fields_ = [
@@ -210,6 +217,7 @@ WinSock API / POSIX sockets
 ```
 
 **Files:**
+
 - `src/network/python_wrapper.c` - C exports
 - `src/python/protocol_wrapper.py` - Python ctypes loader
 - `lib/network.dll` - Compiled C library
@@ -272,27 +280,27 @@ Project/
 
 ### **Layer Responsibilities**
 
-| Layer | Technology | Files | Responsibilities |
-|-------|-----------|-------|------------------|
-| **Presentation** | Python `customtkinter` | `ui/*.py` | User interface, forms, event handling |
-| **Application** | Python | `client_app.py`<br>`server_gui.py`<br>`handlers.py` | Business logic, validation, orchestration |
-| **Protocol** | Python `ctypes` + C | `protocol_wrapper.py`<br>`protocol.c/h` | Message framing, serialization, TAP protocol |
-| **Network** | C | `socket_ops.c/h`<br>`thread_pool.c/h` | TCP/IP, socket I/O, multi-threading |
-| **Database** | Python `sqlite3` | `database/*.py` | Data persistence, CRUD, repositories |
-| **Authentication** | Python | `auth/*.py` | Password hashing, token management |
+| Layer              | Technology             | Files                                               | Responsibilities                             |
+| ------------------ | ---------------------- | --------------------------------------------------- | -------------------------------------------- |
+| **Presentation**   | Python `customtkinter` | `ui/*.py`                                           | User interface, forms, event handling        |
+| **Application**    | Python                 | `client_app.py`<br>`server_gui.py`<br>`handlers.py` | Business logic, validation, orchestration    |
+| **Protocol**       | Python `ctypes` + C    | `protocol_wrapper.py`<br>`protocol.c/h`             | Message framing, serialization, TAP protocol |
+| **Network**        | C                      | `socket_ops.c/h`<br>`thread_pool.c/h`               | TCP/IP, socket I/O, multi-threading          |
+| **Database**       | Python `sqlite3`       | `database/*.py`                                     | Data persistence, CRUD, repositories         |
+| **Authentication** | Python                 | `auth/*.py`                                         | Password hashing, token management           |
 
 ### **Technology Stack**
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **Network Layer** | C (socket API) | Low-level TCP/IP, performance-critical |
-| **Protocol** | C + Python ctypes | Binary protocol implementation |
-| **GUI** | Python customtkinter | Modern, cross-platform UI |
-| **Business Logic** | Python | Application logic, easier to maintain |
-| **Database** | SQLite3 | Lightweight, embedded database |
-| **Authentication** | PBKDF2 (hashlib) | Secure password hashing |
-| **FFI** | ctypes | Python ↔ C integration |
-| **Build** | gcc / MSVC | Compile C to DLL/SO |
+| Component          | Technology           | Purpose                                |
+| ------------------ | -------------------- | -------------------------------------- |
+| **Network Layer**  | C (socket API)       | Low-level TCP/IP, performance-critical |
+| **Protocol**       | C + Python ctypes    | Binary protocol implementation         |
+| **GUI**            | Python customtkinter | Modern, cross-platform UI              |
+| **Business Logic** | Python               | Application logic, easier to maintain  |
+| **Database**       | SQLite3              | Lightweight, embedded database         |
+| **Authentication** | PBKDF2 (hashlib)     | Secure password hashing                |
+| **FFI**            | ctypes               | Python ↔ C integration                 |
+| **Build**          | gcc / MSVC           | Compile C to DLL/SO                    |
 
 ---
 
@@ -310,7 +318,7 @@ CLIENT                              SERVER
   │  3. Fill form & submit            │
   │  ┌──────────────────────┐         │
   │  │ MSG_REGISTER_REQ     │         │
-  │  │ Header (64 bytes)    │─────────┼──► 4. Receive & validate
+  │  │ Header (88 bytes)    │─────────┼──► 4. Receive & validate
   │  │ Payload: {           │         │      - Check username unique
   │  │   username, password,│         │      - Hash password (PBKDF2)
   │  │   role, full_name    │         │      - Insert to database
@@ -432,14 +440,14 @@ CLIENT (teacher_window)               SERVER
 ├────────────────────────────────────┤
 │ 1. Python: dict → JSON string      │
 │ 2. protocol_wrapper.py:            │
-│    - Create header (64 bytes)      │
+│    - Create header (88 bytes)      │
 │    - Add message type code         │
 │    - Add session token (if any)    │
 │    - Add timestamp                 │
 │    - Calculate payload length      │
 │ 3. Call C function:                │
 │    send_protocol_message()         │
-│ 4. C: Send header (64 bytes) first │
+│ 4. C: Send header (88 bytes) first │
 │ 5. C: Send payload (JSON) next     │
 └────────────────────────────────────┘
          │
@@ -448,7 +456,7 @@ CLIENT (teacher_window)               SERVER
 ┌────────────────────────────────────┐
 │   RECEIVE MESSAGE                  │
 ├────────────────────────────────────┤
-│ 1. C: Receive header (64 bytes)    │
+│ 1. C: Receive header (88 bytes)    │
 │ 2. C: Validate magic number        │
 │ 3. C: Check version                │
 │ 4. C: Read payload length          │
@@ -476,7 +484,7 @@ Code C được refactor theo **OSI Model layers** để dễ hiểu và maintai
 │  │ protocol.h / protocol.c                        │  │
 │  │ • TAP Protocol implementation                  │  │
 │  │ • Message types & error codes                  │  │
-│  │ • Header structure (64 bytes fixed)            │  │
+│  │ • Header structure (88 bytes with padding)     │  │
 │  │ • protocol_send_message()                      │  │
 │  │ • protocol_receive_message()                   │  │
 │  │ • protocol_validate_header()                   │  │
@@ -488,11 +496,11 @@ Code C được refactor theo **OSI Model layers** để dễ hiểu và maintai
 │  ┌────────────────────────────────────────────────┐  │
 │  │ socket_ops.h / socket_ops.c                    │  │
 │  │ • TCP socket operations                        │  │
-│  │ • socket_create_server() - Server setup       │  │
-│  │ • socket_accept_client() - Accept connections │  │
-│  │ • socket_connect_to_server() - Client connect │  │
-│  │ • socket_send_data() - Send raw bytes         │  │
-│  │ • socket_receive_data() - Receive raw bytes   │  │
+│  │ • socket_create_server() - Server setup        │  │
+│  │ • socket_accept_client() - Accept connections  │  │
+│  │ • socket_connect_to_server() - Client connect  │  │
+│  │ • socket_send_data() - Send raw bytes          │  │
+│  │ • socket_receive_data() - Receive raw bytes    │  │
 │  │ • socket_close() - Close connection            │  │
 │  └────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────┘
@@ -529,12 +537,14 @@ Code C được refactor theo **OSI Model layers** để dễ hiểu và maintai
 ### **Key Network Programming Concepts Demonstrated:**
 
 1. **Transport Layer (socket_ops.c)**:
+
    - TCP 3-way handshake (SYN, SYN-ACK, ACK)
    - Connection termination (FIN, ACK)
    - Blocking I/O operations
    - Socket address structures
 
 2. **Application Layer (protocol.c)**:
+
    - Custom protocol design
    - Message framing (fixed header + variable payload)
    - Network byte order (Big-endian)
@@ -638,22 +648,24 @@ Project/
 └── PROTOCOL_SPEC.md            # 📋 Protocol technical spec
 ```
 
-
 ---
 
 ## Yêu cầu hệ thống
 
 ### Windows
+
 - **GCC Compiler**: MinGW-w64 hoặc TDM-GCC
   - Download: [MinGW-w64](https://www.mingw-w64.org/) hoặc [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
 - **Python 3.8+**
 - **pip** (Python package manager)
 
 ### Linux
+
 - **GCC**: `sudo apt-get install gcc`
 - **Python 3.8+**: `sudo apt-get install python3 python3-pip`
 
 ### macOS
+
 - **GCC**: `xcode-select --install`
 - **Python 3.8+**: Pre-installed hoặc cài qua Homebrew
 
@@ -664,29 +676,36 @@ Project/
 ### Bước 1️⃣: Build thư viện C
 
 **Build script tự động:**
+
 - Detect Python architecture (32-bit/64-bit)
 - Compile all core modules
 - Link into single shared library (.dll/.so/.dylib)
 
 #### Windows:
+
 ```bash
 ./build.bat
 ```
+
 Compiles:
+
 - `core/socket_ops.c` → TCP socket layer
-- `core/protocol.c` → TAP protocol layer  
+- `core/protocol.c` → TAP protocol layer
 - `core/utils.c` → Utility functions
 - `python_wrapper.c` → Python bindings
-→ Output: `lib/network.dll`
+  → Output: `lib/network.dll`
 
 #### Linux/macOS:
+
 ```bash
 chmod +x build.sh
 ./build.sh
 ```
+
 → Output: `lib/libnetwork.so` (Linux) hoặc `lib/libnetwork.dylib` (macOS)
 
 #### Hoặc sử dụng Makefile:
+
 ```bash
 make           # Build all modules
 make clean     # Clean build artifacts
@@ -700,6 +719,7 @@ pip install -r requirements.txt
 ```
 
 Packages được cài đặt:
+
 - `customtkinter` - Modern GUI library
 - `darkdetect` - Auto dark/light theme detection
 - `packaging` - Required by customtkinter
@@ -711,6 +731,7 @@ python src/python/tests/test_auth.py
 ```
 
 **Kết quả:**
+
 - ✅ Tạo database `data/app.db`
 - ✅ Tạo 2 accounts mẫu:
   - Teacher: `teacher1` / `teacher123`
@@ -723,18 +744,21 @@ python src/python/tests/test_auth.py
 ## **Production Mode (Clean Architecture)**
 
 ### **🖥️ Server (Modular):**
+
 ```bash
 # Chạy server
 python src/python/server/main.py
 ```
 
 Server tự động:
+
 - Khởi tạo database
 - Load câu hỏi từ `questions.json`
 - Start listening trên port **5555**
 - Hiển thị GUI với server log, statistics, và connected users
 
 ### **💻 Client (Modular):**
+
 ```bash
 # Chạy client
 python src/python/client/main.py
@@ -743,16 +767,19 @@ python src/python/client/main.py
 ## **Testing/Demo Mode (Đơn giản - không auth)**
 
 ### **Demo Server (no auth):**
+
 ```bash
 python src/python/tests/test_server.py
 ```
 
 ### **Demo Client (no auth):**
+
 ```bash
 python src/python/tests/test_client.py
 ```
 
 **Khi nào dùng:**
+
 - ✅ Demo network layer đơn giản
 - ✅ Test C library
 - ✅ Học network programming cơ bản

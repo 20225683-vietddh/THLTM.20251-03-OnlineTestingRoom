@@ -106,18 +106,21 @@ socket_t socket_connect_to_server(const char* host, int port);
 int socket_send_data(socket_t socket, const char* data, int length);
 
 /**
- * @brief Receive raw data from TCP socket
+ * @brief Receive raw data from TCP socket (guaranteed complete)
  * @param socket Socket descriptor
  * @param buffer Buffer to store received data
- * @param buffer_size Maximum number of bytes to receive
- * @return Number of bytes received on success, negative on error
+ * @param buffer_size Number of bytes to receive (will loop until complete)
+ * @return Number of bytes received
  * 
  * Network Programming Note:
- * recv() is a BLOCKING call - waits until data arrives or connection closes.
+ * This function GUARANTEES complete reception by looping until ALL
+ * requested bytes are received. TCP recv() may return partial data,
+ * so we loop with offset pointer and remaining byte calculation.
+ * This matches the behavior of socket_send_data() for symmetry.
  * 
  * Return codes:
- * > 0: Success (number of bytes received)
- * 0: Connection closed by peer (graceful shutdown)
+ * buffer_size: Success (all requested bytes received)
+ * 0 to buffer_size-1: Partial (connection closed before completion)
  * -1: Receive error
  */
 int socket_receive_data(socket_t socket, char* buffer, int buffer_size);

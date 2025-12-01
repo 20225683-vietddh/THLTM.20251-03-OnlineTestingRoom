@@ -25,43 +25,39 @@ Based on the goals analysis:
 
 ## Message Structure
 
-### Overall Format
+### Overall Format (88 bytes header with struct padding)
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   HEADER (64 bytes)                     │
-├─────────────┬─────────────┬───────────────┬─────────────┤
-│   Magic     │  Version    │  Message Type │   Length    │
-│  (4 bytes)  │  (2 bytes)  │   (2 bytes)   │  (4 bytes)  │
-├─────────────┼─────────────┼───────────────┼─────────────┤
-│                Message ID (16 bytes UUID)               │
-├─────────────────────────────────────────────────────────┤
-│              Timestamp (8 bytes - Unix time)            │
-├─────────────────────────────────────────────────────────┤
-│         Session Token (32 bytes - or zeros if none)     │
-├─────────────────────────────────────────────────────────┤
-│              Reserved (12 bytes - for future)           │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│                  PAYLOAD (Variable length)              │
-│                         JSON Data                       │
-└─────────────────────────────────────────────────────────┘
+TAP Message Structure:
+┌────────────────────────────────────┐
+│  Header (88 bytes fixed)           │
+│  - Protocol metadata               │
+│  - Length field for payload        │
+│  - Includes struct padding         │
+└────────────────────────────────────┘
+┌────────────────────────────────────┐
+│  Payload (Variable length)         │
+│  - JSON data                       │
+│  - Max 1MB                         │
+└────────────────────────────────────┘
 ```
 
 ### Header Fields
 
-| Field | Size | Type | Description |
-|-------|------|------|-------------|
-| **Magic** | 4 bytes | uint32 | Protocol identifier: `0x54415031` ("TAP1") |
-| **Version** | 2 bytes | uint16 | Protocol version: `0x0100` (v1.0) |
-| **Message Type** | 2 bytes | uint16 | Message type code (see table below) |
-| **Length** | 4 bytes | uint32 | Payload length in bytes (max 1MB) |
-| **Message ID** | 16 bytes | UUID | Unique message identifier |
-| **Timestamp** | 8 bytes | int64 | Unix timestamp (seconds since epoch) |
-| **Session Token** | 32 bytes | bytes | Session token (zeros if not authenticated) |
-| **Reserved** | 12 bytes | bytes | Reserved for future use (zeros) |
+| Field             | Offset | Size     | Type     | Description                                |
+| ----------------- | ------ | -------- | -------- | ------------------------------------------ |
+| **Magic**         | 0-3    | 4 bytes  | uint32   | Protocol identifier: `0x54415031` ("TAP1") |
+| **Version**       | 4-5    | 2 bytes  | uint16   | Protocol version: `0x0100` (v1.0)          |
+| **Message Type**  | 6-7    | 2 bytes  | uint16   | Message type code (see table below)        |
+| **Length**        | 8-11   | 4 bytes  | uint32   | Payload length in bytes (max 1MB)          |
+| **Message ID**    | 12-27  | 16 bytes | char[16] | Unique message identifier                  |
+| **Padding**       | 28-31  | 4 bytes  | -        | Struct alignment padding (compiler added)  |
+| **Timestamp**     | 32-39  | 8 bytes  | int64    | Unix timestamp (seconds since epoch)       |
+| **Session Token** | 40-71  | 32 bytes | char[32] | Session token (zeros if not authenticated) |
+| **Reserved**      | 72-83  | 12 bytes | char[12] | Reserved for future use (zeros)            |
+| **Padding**       | 84-87  | 4 bytes  | -        | Struct alignment padding (compiler added)  |
 
-**Total Header Size:** 64 bytes (fixed)
+**Total Header Size:** 88 bytes (fixed with struct padding)
 
 ---
 
@@ -69,42 +65,42 @@ Based on the goals analysis:
 
 ### Message Type Codes
 
-| Code | Name | Direction | Auth Required | Description |
-|------|------|-----------|---------------|-------------|
-| `0x0001` | REGISTER_REQ | C→S | No | Registration request |
-| `0x0002` | REGISTER_RES | S→C | No | Registration response |
-| `0x0003` | LOGIN_REQ | C→S | No | Login request |
-| `0x0004` | LOGIN_RES | S→C | No | Login response |
-| `0x0005` | LOGOUT_REQ | C→S | Yes | Logout request |
-| `0x0006` | LOGOUT_RES | S→C | Yes | Logout response |
-| `0x0010` | TEST_CONFIG | S→C | Yes | Test configuration |
-| `0x0011` | TEST_START_REQ | C→S | Yes | Start test request |
-| `0x0012` | TEST_START_RES | S→C | Yes | Start test response |
-| `0x0013` | TEST_QUESTIONS | S→C | Yes | Test questions data |
-| `0x0014` | TEST_SUBMIT | C→S | Yes | Submit answers |
-| `0x0015` | TEST_RESULT | S→C | Yes | Test result |
-| `0x0020` | TEACHER_DATA_REQ | C→S | Yes | Teacher data request |
-| `0x0021` | TEACHER_DATA_RES | S→C | Yes | Teacher data response |
-| `0x0030` | CREATE_ROOM_REQ | C→S | Yes | Create test room request |
-| `0x0031` | CREATE_ROOM_RES | S→C | Yes | Create test room response |
-| `0x0032` | JOIN_ROOM_REQ | C→S | Yes | Student join room request |
-| `0x0033` | JOIN_ROOM_RES | S→C | Yes | Student join room response |
-| `0x0034` | START_ROOM_REQ | C→S | Yes | Start test in room request |
-| `0x0035` | START_ROOM_RES | S→C | Yes | Start test in room response |
-| `0x0036` | END_ROOM_REQ | C→S | Yes | End test in room request |
-| `0x0037` | END_ROOM_RES | S→C | Yes | End test in room response |
-| `0x0038` | GET_ROOMS_REQ | C→S | Yes | Get teacher rooms request |
-| `0x0039` | GET_ROOMS_RES | S→C | Yes | Get teacher rooms response |
-| `0x0040` | ADD_QUESTION_REQ | C→S | Yes | Add question to room request |
-| `0x0041` | ADD_QUESTION_RES | S→C | Yes | Add question to room response |
-| `0x0042` | GET_QUESTIONS_REQ | C→S | Yes | Get room questions request |
-| `0x0043` | GET_QUESTIONS_RES | S→C | Yes | Get room questions response |
-| `0x0044` | DELETE_QUESTION_REQ | C→S | Yes | Delete question request |
-| `0x0045` | DELETE_QUESTION_RES | S→C | Yes | Delete question response |
-| `0x0046` | GET_STUDENT_ROOMS_REQ | C→S | Yes | Get student rooms request |
-| `0x0047` | GET_STUDENT_ROOMS_RES | S→C | Yes | Get student rooms response |
-| `0x00FF` | ERROR | S→C | No | Error response |
-| `0x00FE` | HEARTBEAT | C↔S | Optional | Keep-alive message |
+| Code     | Name                  | Direction | Auth Required | Description                   |
+| -------- | --------------------- | --------- | ------------- | ----------------------------- |
+| `0x0001` | REGISTER_REQ          | C→S       | No            | Registration request          |
+| `0x0002` | REGISTER_RES          | S→C       | No            | Registration response         |
+| `0x0003` | LOGIN_REQ             | C→S       | No            | Login request                 |
+| `0x0004` | LOGIN_RES             | S→C       | No            | Login response                |
+| `0x0005` | LOGOUT_REQ            | C→S       | Yes           | Logout request                |
+| `0x0006` | LOGOUT_RES            | S→C       | Yes           | Logout response               |
+| `0x0010` | TEST_CONFIG           | S→C       | Yes           | Test configuration            |
+| `0x0011` | TEST_START_REQ        | C→S       | Yes           | Start test request            |
+| `0x0012` | TEST_START_RES        | S→C       | Yes           | Start test response           |
+| `0x0013` | TEST_QUESTIONS        | S→C       | Yes           | Test questions data           |
+| `0x0014` | TEST_SUBMIT           | C→S       | Yes           | Submit answers                |
+| `0x0015` | TEST_RESULT           | S→C       | Yes           | Test result                   |
+| `0x0020` | TEACHER_DATA_REQ      | C→S       | Yes           | Teacher data request          |
+| `0x0021` | TEACHER_DATA_RES      | S→C       | Yes           | Teacher data response         |
+| `0x0030` | CREATE_ROOM_REQ       | C→S       | Yes           | Create test room request      |
+| `0x0031` | CREATE_ROOM_RES       | S→C       | Yes           | Create test room response     |
+| `0x0032` | JOIN_ROOM_REQ         | C→S       | Yes           | Student join room request     |
+| `0x0033` | JOIN_ROOM_RES         | S→C       | Yes           | Student join room response    |
+| `0x0034` | START_ROOM_REQ        | C→S       | Yes           | Start test in room request    |
+| `0x0035` | START_ROOM_RES        | S→C       | Yes           | Start test in room response   |
+| `0x0036` | END_ROOM_REQ          | C→S       | Yes           | End test in room request      |
+| `0x0037` | END_ROOM_RES          | S→C       | Yes           | End test in room response     |
+| `0x0038` | GET_ROOMS_REQ         | C→S       | Yes           | Get teacher rooms request     |
+| `0x0039` | GET_ROOMS_RES         | S→C       | Yes           | Get teacher rooms response    |
+| `0x0040` | ADD_QUESTION_REQ      | C→S       | Yes           | Add question to room request  |
+| `0x0041` | ADD_QUESTION_RES      | S→C       | Yes           | Add question to room response |
+| `0x0042` | GET_QUESTIONS_REQ     | C→S       | Yes           | Get room questions request    |
+| `0x0043` | GET_QUESTIONS_RES     | S→C       | Yes           | Get room questions response   |
+| `0x0044` | DELETE_QUESTION_REQ   | C→S       | Yes           | Delete question request       |
+| `0x0045` | DELETE_QUESTION_RES   | S→C       | Yes           | Delete question response      |
+| `0x0046` | GET_STUDENT_ROOMS_REQ | C→S       | Yes           | Get student rooms request     |
+| `0x0047` | GET_STUDENT_ROOMS_RES | S→C       | Yes           | Get student rooms response    |
+| `0x00FF` | ERROR                 | S→C       | No            | Error response                |
+| `0x00FE` | HEARTBEAT             | C↔S       | Optional      | Keep-alive message            |
 
 ---
 
@@ -112,24 +108,24 @@ Based on the goals analysis:
 
 ### Standard Error Codes
 
-| Code | Name | Description |
-|------|------|-------------|
-| `1000` | SUCCESS | Operation successful |
-| `2000` | BAD_REQUEST | Malformed request |
-| `2001` | INVALID_JSON | JSON parse error |
-| `2002` | MISSING_FIELD | Required field missing |
-| `2003` | INVALID_VALUE | Field value invalid |
-| `3000` | UNAUTHORIZED | Authentication required |
-| `3001` | INVALID_CREDENTIALS | Wrong username/password |
-| `3002` | SESSION_EXPIRED | Session token expired |
-| `3003` | INVALID_TOKEN | Session token invalid |
-| `4000` | FORBIDDEN | Insufficient permissions |
-| `4001` | WRONG_ROLE | Operation not allowed for this role |
-| `5000` | CONFLICT | Resource conflict |
-| `5001` | USERNAME_EXISTS | Username already taken |
-| `6000` | INTERNAL_ERROR | Server internal error |
-| `6001` | DATABASE_ERROR | Database operation failed |
-| `6002` | NETWORK_ERROR | Network operation failed |
+| Code   | Name                | Description                         |
+| ------ | ------------------- | ----------------------------------- |
+| `1000` | SUCCESS             | Operation successful                |
+| `2000` | BAD_REQUEST         | Malformed request                   |
+| `2001` | INVALID_JSON        | JSON parse error                    |
+| `2002` | MISSING_FIELD       | Required field missing              |
+| `2003` | INVALID_VALUE       | Field value invalid                 |
+| `3000` | UNAUTHORIZED        | Authentication required             |
+| `3001` | INVALID_CREDENTIALS | Wrong username/password             |
+| `3002` | SESSION_EXPIRED     | Session token expired               |
+| `3003` | INVALID_TOKEN       | Session token invalid               |
+| `4000` | FORBIDDEN           | Insufficient permissions            |
+| `4001` | WRONG_ROLE          | Operation not allowed for this role |
+| `5000` | CONFLICT            | Resource conflict                   |
+| `5001` | USERNAME_EXISTS     | Username already taken              |
+| `6000` | INTERNAL_ERROR      | Server internal error               |
+| `6001` | DATABASE_ERROR      | Database operation failed           |
+| `6002` | NETWORK_ERROR       | Network operation failed            |
 
 ---
 
@@ -141,15 +137,16 @@ Based on the goals analysis:
 
 ```json
 {
-    "username": "john123",
-    "password": "mypassword",
-    "role": "student",
-    "full_name": "John Doe",
-    "email": "john@example.com"
+  "username": "john123",
+  "password": "mypassword",
+  "role": "student",
+  "full_name": "John Doe",
+  "email": "john@example.com"
 }
 ```
 
 **Validation Rules:**
+
 - `username`: 3-20 chars, alphanumeric, required
 - `password`: 6-50 chars, required
 - `role`: "student" or "teacher", required
@@ -161,28 +158,30 @@ Based on the goals analysis:
 **Server → Client**
 
 **Success:**
+
 ```json
 {
-    "status": "success",
-    "code": 1000,
-    "data": {
-        "user_id": 5,
-        "username": "john123",
-        "role": "student"
-    }
+  "status": "success",
+  "code": 1000,
+  "data": {
+    "user_id": 5,
+    "username": "john123",
+    "role": "student"
+  }
 }
 ```
 
 **Failure:**
+
 ```json
 {
-    "status": "error",
-    "code": 5001,
-    "message": "Username already exists",
-    "details": {
-        "field": "username",
-        "value": "john123"
-    }
+  "status": "error",
+  "code": 5001,
+  "message": "Username already exists",
+  "details": {
+    "field": "username",
+    "value": "john123"
+  }
 }
 ```
 
@@ -192,9 +191,9 @@ Based on the goals analysis:
 
 ```json
 {
-    "username": "john123",
-    "password": "mypassword",
-    "role": "student"
+  "username": "john123",
+  "password": "mypassword",
+  "role": "student"
 }
 ```
 
@@ -203,27 +202,29 @@ Based on the goals analysis:
 **Server → Client**
 
 **Success:**
+
 ```json
 {
-    "status": "success",
-    "code": 1000,
-    "data": {
-        "session_token": "32-byte-hex-string",
-        "user_id": 5,
-        "username": "john123",
-        "role": "student",
-        "full_name": "John Doe",
-        "expires_at": 1701320400
-    }
+  "status": "success",
+  "code": 1000,
+  "data": {
+    "session_token": "32-byte-hex-string",
+    "user_id": 5,
+    "username": "john123",
+    "role": "student",
+    "full_name": "John Doe",
+    "expires_at": 1701320400
+  }
 }
 ```
 
 **Failure:**
+
 ```json
 {
-    "status": "error",
-    "code": 3001,
-    "message": "Invalid credentials"
+  "status": "error",
+  "code": 3001,
+  "message": "Invalid credentials"
 }
 ```
 
@@ -233,10 +234,10 @@ Based on the goals analysis:
 
 ```json
 {
-    "num_questions": 10,
-    "duration": 30,
-    "test_id": 1,
-    "test_name": "Network Programming Quiz"
+  "num_questions": 10,
+  "duration": 30,
+  "test_id": 1,
+  "test_name": "Network Programming Quiz"
 }
 ```
 
@@ -246,7 +247,7 @@ Based on the goals analysis:
 
 ```json
 {
-    "ready": true
+  "ready": true
 }
 ```
 
@@ -256,10 +257,10 @@ Based on the goals analysis:
 
 ```json
 {
-    "status": "success",
-    "code": 1000,
-    "message": "Test started",
-    "start_time": 1701320400
+  "status": "success",
+  "code": 1000,
+  "message": "Test started",
+  "start_time": 1701320400
 }
 ```
 
@@ -269,18 +270,18 @@ Based on the goals analysis:
 
 ```json
 {
-    "questions": [
-        {
-            "id": 1,
-            "question": "What does TCP stand for?",
-            "options": [
-                "Transmission Control Protocol",
-                "Transfer Control Protocol",
-                "Transport Communication Protocol",
-                "Telecommunication Control Protocol"
-            ]
-        }
-    ]
+  "questions": [
+    {
+      "id": 1,
+      "question": "What does TCP stand for?",
+      "options": [
+        "Transmission Control Protocol",
+        "Transfer Control Protocol",
+        "Transport Communication Protocol",
+        "Telecommunication Control Protocol"
+      ]
+    }
+  ]
 }
 ```
 
@@ -290,17 +291,17 @@ Based on the goals analysis:
 
 ```json
 {
-    "answers": [
-        {
-            "question_id": 1,
-            "selected": 0
-        },
-        {
-            "question_id": 2,
-            "selected": 2
-        }
-    ],
-    "end_time": 1701322000
+  "answers": [
+    {
+      "question_id": 1,
+      "selected": 0
+    },
+    {
+      "question_id": 2,
+      "selected": 2
+    }
+  ],
+  "end_time": 1701322000
 }
 ```
 
@@ -310,15 +311,15 @@ Based on the goals analysis:
 
 ```json
 {
-    "status": "success",
-    "code": 1000,
-    "data": {
-        "score": 8,
-        "total": 10,
-        "percentage": 80.0,
-        "result_id": 42,
-        "saved": true
-    }
+  "status": "success",
+  "code": 1000,
+  "data": {
+    "score": 8,
+    "total": 10,
+    "percentage": 80.0,
+    "result_id": 42,
+    "saved": true
+  }
 }
 ```
 
@@ -328,12 +329,12 @@ Based on the goals analysis:
 
 ```json
 {
-    "filter": {
-        "start_date": "2024-01-01",
-        "end_date": "2024-12-31"
-    },
-    "limit": 100,
-    "offset": 0
+  "filter": {
+    "start_date": "2024-01-01",
+    "end_date": "2024-12-31"
+  },
+  "limit": 100,
+  "offset": 0
 }
 ```
 
@@ -343,24 +344,24 @@ Based on the goals analysis:
 
 ```json
 {
-    "status": "success",
-    "code": 1000,
-    "data": {
-        "results": [
-            {
-                "id": 1,
-                "username": "john123",
-                "full_name": "John Doe",
-                "test_date": "2024-11-28T14:30:00Z",
-                "score": 8,
-                "total_questions": 10,
-                "percentage": 80.0
-            }
-        ],
-        "total_count": 150,
-        "limit": 100,
-        "offset": 0
-    }
+  "status": "success",
+  "code": 1000,
+  "data": {
+    "results": [
+      {
+        "id": 1,
+        "username": "john123",
+        "full_name": "John Doe",
+        "test_date": "2024-11-28T14:30:00Z",
+        "score": 8,
+        "total_questions": 10,
+        "percentage": 80.0
+      }
+    ],
+    "total_count": 150,
+    "limit": 100,
+    "offset": 0
+  }
 }
 ```
 
@@ -370,13 +371,13 @@ Based on the goals analysis:
 
 ```json
 {
-    "status": "error",
-    "code": 2000,
-    "message": "Bad request",
-    "details": {
-        "field": "username",
-        "reason": "Field is required"
-    }
+  "status": "error",
+  "code": 2000,
+  "message": "Bad request",
+  "details": {
+    "field": "username",
+    "reason": "Field is required"
+  }
 }
 ```
 
@@ -386,7 +387,7 @@ Based on the goals analysis:
 
 ```json
 {
-    "room_code": "ABC123"
+  "room_code": "ABC123"
 }
 ```
 
@@ -395,29 +396,31 @@ Based on the goals analysis:
 **Server → Client**
 
 **Success:**
+
 ```json
 {
-    "status": "success",
-    "code": 1000,
-    "message": "Joined room successfully",
-    "data": {
-        "room_id": 5,
-        "room_name": "Network Programming Quiz",
-        "room_code": "ABC123",
-        "teacher_name": "Dr. Smith",
-        "num_questions": 10,
-        "duration_minutes": 30,
-        "status": "waiting"
-    }
+  "status": "success",
+  "code": 1000,
+  "message": "Joined room successfully",
+  "data": {
+    "room_id": 5,
+    "room_name": "Network Programming Quiz",
+    "room_code": "ABC123",
+    "teacher_name": "Dr. Smith",
+    "num_questions": 10,
+    "duration_minutes": 30,
+    "status": "waiting"
+  }
 }
 ```
 
 **Failure:**
+
 ```json
 {
-    "status": "error",
-    "code": 2000,
-    "message": "Room not found"
+  "status": "error",
+  "code": 2000,
+  "message": "Room not found"
 }
 ```
 
@@ -435,24 +438,24 @@ Based on the goals analysis:
 
 ```json
 {
-    "status": "success",
-    "code": 1000,
-    "message": "Student rooms loaded",
-    "data": {
-        "rooms": [
-            {
-                "id": 5,
-                "room_name": "Network Programming Quiz",
-                "room_code": "ABC123",
-                "teacher_name": "Dr. Smith",
-                "num_questions": 10,
-                "duration_minutes": 30,
-                "room_status": "waiting",
-                "joined_at": "2024-11-28T14:30:00",
-                "participant_status": "joined"
-            }
-        ]
-    }
+  "status": "success",
+  "code": 1000,
+  "message": "Student rooms loaded",
+  "data": {
+    "rooms": [
+      {
+        "id": 5,
+        "room_name": "Network Programming Quiz",
+        "room_code": "ABC123",
+        "teacher_name": "Dr. Smith",
+        "num_questions": 10,
+        "duration_minutes": 30,
+        "room_status": "waiting",
+        "joined_at": "2024-11-28T14:30:00",
+        "participant_status": "joined"
+      }
+    ]
+  }
 }
 ```
 
@@ -462,15 +465,16 @@ Based on the goals analysis:
 
 ```json
 {
-    "ping": true
+  "ping": true
 }
 ```
 
 **Response:**
+
 ```json
 {
-    "pong": true,
-    "server_time": 1701320400
+  "pong": true,
+  "server_time": 1701320400
 }
 ```
 
@@ -638,8 +642,8 @@ Client                              Server
  Success  Fail                    │
    │       │                      │
    │       └──────────────────────┘
-   │                              
-   ▼                              
+   │
+   ▼
 ┌──────────────┐
 │ AUTHENTICATED│
 └──────┬───────┘
@@ -660,28 +664,33 @@ Role=Student  Role=Teacher  LOGOUT
 ## Security Considerations
 
 ### 1. Password Security
+
 - **Client:** Send plain password (encrypted by TLS in production)
 - **Server:** Immediately hash with PBKDF2-HMAC-SHA256 + salt
 - **Storage:** Only store `salt$hash`, never plain password
 
 ### 2. Session Security
+
 - **Token:** 32-byte cryptographically secure random
 - **Expiration:** 24 hours (configurable)
 - **Storage:** Server memory (fast, auto-cleanup)
 - **Validation:** Every authenticated request
 
 ### 3. Transport Security
+
 - **Current:** Plain TCP (development only)
 - **Production:** TLS 1.3 required
 - **Certificate:** Valid SSL certificate needed
 
 ### 4. Input Validation
+
 - **Server-side:** ALL inputs validated
 - **Client-side:** Basic validation (UX)
 - **SQL Injection:** Use prepared statements
 - **XSS:** JSON encoding handles this
 
 ### 5. Rate Limiting
+
 - **Login attempts:** Max 5 per minute per IP
 - **Registration:** Max 3 per hour per IP
 - **API calls:** Max 100 per minute per session
@@ -695,33 +704,37 @@ Role=Student  Role=Teacher  LOGOUT
 If protocol version mismatch:
 
 **Server response:**
+
 ```json
 {
-    "status": "error",
-    "code": 2000,
-    "message": "Protocol version not supported",
-    "details": {
-        "client_version": "1.0",
-        "server_version": "1.1",
-        "min_supported": "1.0",
-        "upgrade_required": false
-    }
+  "status": "error",
+  "code": 2000,
+  "message": "Protocol version not supported",
+  "details": {
+    "client_version": "1.0",
+    "server_version": "1.1",
+    "min_supported": "1.0",
+    "upgrade_required": false
+  }
 }
 ```
 
 ### Migration from Old Protocol
 
 **Old format:**
+
 ```
 LOGIN:student:{"username":"john","password":"pass"}
 ```
 
-**New format:** 
+**New format:**
+
 - Same JSON payload
 - Wrapped with binary header
 - Add message type, ID, timestamp
 
 **Server supports both:**
+
 1. Check first 4 bytes for magic `0x54415031`
 2. If magic present → New protocol
 3. If not → Legacy protocol (text-based)
@@ -732,13 +745,13 @@ LOGIN:student:{"username":"john","password":"pass"}
 
 ### Message Size Limits
 
-| Message Type | Max Size | Typical Size |
-|--------------|----------|--------------|
-| REGISTER_REQ | 1 KB | ~200 bytes |
-| LOGIN_REQ | 512 bytes | ~100 bytes |
-| TEST_QUESTIONS | 512 KB | ~50 KB (10 questions) |
-| TEST_SUBMIT | 10 KB | ~1 KB |
-| TEACHER_DATA | 1 MB | ~100 KB |
+| Message Type   | Max Size  | Typical Size          |
+| -------------- | --------- | --------------------- |
+| REGISTER_REQ   | 1 KB      | ~200 bytes            |
+| LOGIN_REQ      | 512 bytes | ~100 bytes            |
+| TEST_QUESTIONS | 512 KB    | ~50 KB (10 questions) |
+| TEST_SUBMIT    | 10 KB     | ~1 KB                 |
+| TEACHER_DATA   | 1 MB      | ~100 KB               |
 
 ### Throughput
 
@@ -760,6 +773,7 @@ LOGIN:student:{"username":"john","password":"pass"}
 ## Error Handling Best Practices
 
 ### 1. Always Check Header Magic
+
 ```c
 if (header.magic != 0x54415031) {
     return ERR_INVALID_PROTOCOL;
@@ -767,6 +781,7 @@ if (header.magic != 0x54415031) {
 ```
 
 ### 2. Validate Message Length
+
 ```c
 if (header.length > MAX_PAYLOAD_SIZE) {
     return ERR_MESSAGE_TOO_LARGE;
@@ -774,6 +789,7 @@ if (header.length > MAX_PAYLOAD_SIZE) {
 ```
 
 ### 3. Verify JSON Structure
+
 ```python
 try:
     data = json.loads(payload)
@@ -782,6 +798,7 @@ except JSONDecodeError:
 ```
 
 ### 4. Check Session Token
+
 ```python
 session = validate_session(header.session_token)
 if not session:
@@ -789,6 +806,7 @@ if not session:
 ```
 
 ### 5. Role-Based Authorization
+
 ```python
 if message_type == TEACHER_DATA_REQ:
     if session['role'] != 'teacher':
@@ -800,18 +818,21 @@ if message_type == TEACHER_DATA_REQ:
 ## Implementation Notes
 
 ### C Layer
+
 - Binary header packing/unpacking
 - Network byte order (big-endian)
 - Socket send/receive with length prefix
 - Header validation functions
 
 ### Python Layer
+
 - Struct packing for header
 - JSON for payload
 - ctypes integration
 - Error code mapping
 
 ### Testing
+
 - Unit tests for each message type
 - Integration tests for flows
 - Load testing (100+ concurrent)
@@ -831,4 +852,3 @@ if message_type == TEACHER_DATA_REQ:
 **Protocol Version:** 1.0  
 **Last Updated:** 2024-11-28  
 **Status:** Production Ready
-

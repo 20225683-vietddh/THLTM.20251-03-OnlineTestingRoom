@@ -86,10 +86,12 @@ typedef struct {
     uint16_t message_type;       // 2 bytes: Message type code
     uint32_t length;             // 4 bytes: Payload length in bytes
     char message_id[16];         // 16 bytes: Unique message identifier
+                                 // 4 bytes: Padding (compiler added for int64_t alignment)
     int64_t timestamp;           // 8 bytes: Unix timestamp (seconds since epoch)
     char session_token[32];      // 32 bytes: Session token (or zeros if not authenticated)
     char reserved[12];           // 12 bytes: Reserved for future use (zeros)
-} protocol_header_t;
+                                 // 4 bytes: Padding (compiler added for struct alignment)
+} protocol_header_t;             // Total: 88 bytes with padding
 
 /**
  * @brief Initialize protocol header with given parameters
@@ -133,7 +135,7 @@ int protocol_validate_header(protocol_header_t* header);
  * 
  * Network Programming Flow:
  * 1. Build header with metadata
- * 2. Send header (64 bytes fixed)
+ * 2. Send header (fixed size: sizeof(protocol_header_t))
  * 3. Send payload (variable length if exists)
  * 
  * Return codes:
@@ -153,7 +155,7 @@ int protocol_send_message(socket_t socket, uint16_t msg_type,
  * @return Payload length on success, negative on error
  * 
  * Network Programming Flow:
- * 1. Receive header (64 bytes fixed)
+ * 1. Receive header (fixed size: sizeof(protocol_header_t))
  * 2. Validate header
  * 3. Receive payload (if length > 0)
  * 

@@ -185,4 +185,3 @@ void server_context_destroy(server_context_t* ctx) {
         mutex_destroy(&ctx->clients_mutex);
     }
 }
-

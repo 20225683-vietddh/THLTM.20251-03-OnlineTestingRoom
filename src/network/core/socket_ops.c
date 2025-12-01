@@ -146,11 +146,32 @@ int socket_send_data(socket_t socket, const char* data, int length) {
 
 int socket_receive_data(socket_t socket, char* buffer, int buffer_size) {
     // Receive data from socket (BLOCKING)
-    // Returns number of bytes received
-    // Returns 0 if connection closed gracefully
-    // Returns -1 on error
-    int bytes_received = recv(socket, buffer, buffer_size, 0);
-    return bytes_received;
+    // Network Programming Note:
+    // TCP is a byte stream - recv() may return partial data.
+    // We loop until ALL requested bytes are received.
+    int total_received = 0;
+    int bytes_received;
+    
+    while (total_received < buffer_size) {
+        bytes_received = recv(socket, buffer + total_received, 
+                             buffer_size - total_received, 0);
+        
+        if (bytes_received == 0) {
+            // Connection closed gracefully
+            // Return bytes received so far (may be partial)
+            return total_received;
+        }
+        
+        if (bytes_received == SOCKET_ERROR) {
+            // Error occurred
+            return -1;
+        }
+        
+        total_received += bytes_received;
+    }
+    
+    // All requested bytes received
+    return total_received;
 }
 
 // ==================== CONNECTION MANAGEMENT ====================

@@ -3,8 +3,9 @@
 ## 🎯 Requirements và Implementation
 
 **Giả sử rubric có 3 yêu cầu đầu:**
+
 1. Xử lý luồng (Stream Handling) - 1 điểm
-2. Cài đặt cơ chế I/O qua socket trên máy chủ - 2 điểm  
+2. Cài đặt cơ chế I/O qua socket trên máy chủ - 2 điểm
 3. Multi-threading trên server (C) - 2 điểm
 
 ---
@@ -14,6 +15,7 @@
 ### **📖 Khái niệm Network Programming:**
 
 **TCP Socket** là **byte stream**, không phải **message-based protocol**:
+
 - Data đến liên tục như một dòng chảy (stream of bytes)
 - Không có "message boundaries" tự nhiên
 - `send(100 bytes)` có thể được `recv()` thành nhiều phần: 30 + 40 + 30 bytes
@@ -22,6 +24,7 @@
 ### **Vấn đề:** TCP là byte stream, không phải message-based
 
 TCP không có "message boundaries" - data đến dưới dạng continuous byte stream. Server/Client phải tự xử lý:
+
 - Làm sao biết một message kết thúc?
 - Làm sao xử lý partial receives?
 - Làm sao đảm bảo nhận đủ dữ liệu?
@@ -42,32 +45,57 @@ typedef struct {
     int64_t timestamp;        // 8 bytes: Unix timestamp
     char session_token[32];   // 32 bytes: Session token
     char reserved[12];        // 12 bytes: Reserved
-} protocol_header_t;          // TOTAL: 64 bytes FIXED
+} protocol_header_t;          // TOTAL: 88 bytes with padding
 ```
 
-**Tại sao 64 bytes fixed?**
-✅ Server luôn biết phải đọc **chính xác 64 bytes** cho header
+**Tại sao fixed size?**
+✅ Server luôn biết phải đọc **chính xác sizeof(protocol_header_t) bytes** cho header
 ✅ Field `length` cho biết payload size → biết phải đọc bao nhiêu bytes tiếp theo
 ✅ Deterministic parsing - không cần scan cho delimiters
 
 ---
 
-#### **B. Guaranteed Complete Receive**
+#### **B. Guaranteed Complete Receive (Loop Until All Bytes)**
 
-**File:** `src/network/core/socket_ops.c` (dòng 147-154)
+**File:** `src/network/core/socket_ops.c` (dòng 147-175)
 
 ```c
 int socket_receive_data(socket_t socket, char* buffer, int buffer_size) {
-    // Receive data from socket (BLOCKING)
-    // Returns number of bytes received
-    // Returns 0 if connection closed gracefully
-    // Returns -1 on error
-    int bytes_received = recv(socket, buffer, buffer_size, 0);
-    return bytes_received;
+    // Network Programming Note:
+    // TCP is a byte stream - recv() may return partial data.
+    // We loop until ALL requested bytes are received.
+    int total_received = 0;
+    int bytes_received;
+
+    while (total_received < buffer_size) {
+        bytes_received = recv(socket, buffer + total_received,
+                             buffer_size - total_received, 0);
+
+        if (bytes_received == 0) {
+            // Connection closed gracefully
+            return total_received;  // Return bytes received so far
+        }
+
+        if (bytes_received == SOCKET_ERROR) {
+            return -1;  // Error occurred
+        }
+
+        total_received += bytes_received;
+    }
+
+    return total_received;  // All requested bytes received
 }
 ```
 
-**Kết hợp với Protocol Layer để đảm bảo nhận đủ:**
+**📝 Key Points:**
+
+1. **Loop until complete** → `while (total_received < buffer_size)`
+2. **Offset pointer** → `buffer + total_received`
+3. **Remaining calculation** → `buffer_size - total_received`
+4. **Handle connection close** → Return partial data (let caller handle)
+5. **Accumulate bytes** → `total_received += bytes_received`
+
+**Kết hợp với Protocol Layer:**
 
 **File:** `src/network/core/protocol.c` (dòng 83-122)
 
@@ -76,55 +104,56 @@ int protocol_receive_message(socket_t socket, protocol_header_t* header,
                              char* payload, int max_payload_size) {
     // ========== STREAM HANDLING STEP 1: Receive Header ==========
     // TCP is a BYTE STREAM - not message-based!
-    // We MUST receive exactly 64 bytes for header
-    int bytes_received = socket_receive_data(socket, 
-                                            (char*)header, 
+    // We MUST receive exactly sizeof(protocol_header_t) bytes for header
+    int bytes_received = socket_receive_data(socket,
+                                            (char*)header,
                                             sizeof(protocol_header_t));
-    
+
     if (bytes_received != sizeof(protocol_header_t)) {
         return -1;  // Incomplete header or connection closed
     }
-    
+
     // ========== STREAM HANDLING STEP 2: Validate Header ==========
     int validation = protocol_validate_header(header);
     if (validation != 0) {
         return validation;  // Invalid header
     }
-    
+
     // ========== STREAM HANDLING STEP 3: Get Payload Size ==========
     // Extract length from header (network byte order → host byte order)
     uint32_t payload_length = ntohl(header->length);
-    
+
     // Check if buffer is large enough
     if (payload_length > (uint32_t)(max_payload_size - 1)) {
         return -4;  // Buffer too small
     }
-    
+
     // ========== STREAM HANDLING STEP 4: Receive Exact Payload ==========
     if (payload_length > 0) {
         // Now we know EXACTLY how many bytes to receive!
         bytes_received = socket_receive_data(socket, payload, payload_length);
-        
+
         if (bytes_received != (int)payload_length) {
             return -5;  // Incomplete payload received
         }
-        
+
         payload[payload_length] = '\0';  // Null-terminate
     } else {
         payload[0] = '\0';
     }
-    
+
     return (int)payload_length;
 }
 ```
 
 **📝 Key Points cho Stream Handling:**
 
-1. **Fixed-size header (64 bytes)** → Luôn biết phải đọc bao nhiêu bytes trước
+1. **Fixed-size header (88 bytes)** → Luôn biết phải đọc bao nhiêu bytes trước
 2. **Length field trong header** → Biết payload size để đọc tiếp
-3. **Exact byte checking** → `bytes_received != expected_size` → error
-4. **Network byte order** → `ntohl()` để convert từ Big-endian
-5. **Null-termination** → Thêm `\0` để payload thành valid C string
+3. **Loop until complete** → `socket_receive_data()` loops internally until all bytes received
+4. **Exact byte checking** → `bytes_received != expected_size` → error (connection closed or error)
+5. **Network byte order** → `ntohl()` để convert từ Big-endian
+6. **Null-termination** → Thêm `\0` để payload thành valid C string
 
 ---
 
@@ -141,18 +170,18 @@ int socket_send_data(socket_t socket, const char* data, int length) {
     // TCP may NOT send all data in one call!
     // We must loop until everything is sent
     while (total_sent < length) {
-        bytes_sent = send(socket, 
+        bytes_sent = send(socket,
                          data + total_sent,     // Offset pointer
                          length - total_sent,   // Remaining bytes
                          0);
-        
+
         if (bytes_sent == SOCKET_ERROR) {
             return -1;  // Send error
         }
-        
+
         total_sent += bytes_sent;  // Accumulate sent bytes
     }
-    
+
     return total_sent;  // Total bytes successfully sent
 }
 ```
@@ -175,18 +204,18 @@ int protocol_send_message(socket_t socket, uint16_t msg_type,
                          const char* payload, const char* session_token) {
     protocol_header_t header;
     uint32_t payload_length = payload ? strlen(payload) : 0;
-    
+
     // Initialize header with length
     protocol_init_header(&header, msg_type, payload_length, session_token);
-    
-    // ========== STREAM SEND STEP 1: Send Header (64 bytes) ==========
-    int header_sent = socket_send_data(socket, 
-                                       (char*)&header, 
+
+    // ========== STREAM SEND STEP 1: Send Header (fixed size) ==========
+    int header_sent = socket_send_data(socket,
+                                       (char*)&header,
                                        sizeof(protocol_header_t));
     if (header_sent != sizeof(protocol_header_t)) {
         return -1;  // Header send failed
     }
-    
+
     // ========== STREAM SEND STEP 2: Send Payload ==========
     if (payload_length > 0) {
         int payload_sent = socket_send_data(socket, payload, payload_length);
@@ -195,7 +224,7 @@ int protocol_send_message(socket_t socket, uint16_t msg_type,
         }
         return header_sent + payload_sent;
     }
-    
+
     return header_sent;
 }
 ```
@@ -204,14 +233,14 @@ int protocol_send_message(socket_t socket, uint16_t msg_type,
 
 ### **✅ Kết luận Stream Handling:**
 
-| Aspect | Implementation |
-|--------|---------------|
-| **Message Framing** | Fixed 64-byte header + variable payload |
-| **Boundary Detection** | Length field trong header |
-| **Partial Send** | Loop until all bytes sent |
-| **Partial Receive** | Check exact byte count received |
-| **Byte Order** | Network byte order (Big-endian) |
-| **Validation** | Magic number + version check |
+| Aspect                 | Implementation                                      |
+| ---------------------- | --------------------------------------------------- |
+| **Message Framing**    | Fixed 88-byte header + variable payload             |
+| **Boundary Detection** | Length field trong header                           |
+| **Partial Send**       | Loop until all bytes sent (socket_send_data)        |
+| **Partial Receive**    | Loop until all bytes received (socket_receive_data) |
+| **Byte Order**         | Network byte order (Big-endian)                     |
+| **Validation**         | Magic number + version check                        |
 
 ---
 
@@ -222,6 +251,7 @@ int protocol_send_message(socket_t socket, uint16_t msg_type,
 ### **📖 Khái niệm Network Programming:**
 
 **Server socket I/O** bao gồm:
+
 - **Passive socket** (server): `socket()` → `bind()` → `listen()` → `accept()`
 - **Active socket** (client connection): Mỗi client có dedicated socket
 - **Blocking I/O**: `recv()` và `send()` block thread cho đến khi data available/sent
@@ -302,10 +332,10 @@ socket_t socket_accept_client(socket_t server_socket) {
     //   Client → Server: SYN
     //   Server → Client: SYN-ACK
     //   Client → Server: ACK
-    client_socket = accept(server_socket, 
-                          (struct sockaddr*)&client_addr, 
+    client_socket = accept(server_socket,
+                          (struct sockaddr*)&client_addr,
                           &addr_len);
-    
+
     return client_socket;  // New socket for this specific client
 }
 ```
@@ -326,12 +356,14 @@ socket_t socket_accept_client(socket_t server_socket) {
 ### **📖 Khái niệm Network Programming:**
 
 **Why Multi-threading for Servers?**
+
 - **Concurrent clients**: Nhiều clients kết nối đồng thời
 - **Blocking I/O**: `recv()` blocks → cần separate threads
 - **Independence**: Mỗi client có request/response độc lập
 - **Simplicity**: Code đơn giản hơn non-blocking I/O
 
 **Threading Models:**
+
 1. **Thread-per-client** ← Chúng ta dùng model này
 2. Thread pool (reuse threads)
 3. Non-blocking I/O (select/poll/epoll)
@@ -356,8 +388,9 @@ socket_t socket_accept_client(socket_t server_socket) {
 ```
 
 **Cross-platform API:**
+
 ```c
-int thread_create_client_handler(client_handler_func handler, 
+int thread_create_client_handler(client_handler_func handler,
                                  client_context_t* context);
 int mutex_init(mutex_t* mutex);
 int mutex_lock(mutex_t* mutex);
@@ -373,7 +406,7 @@ int mutex_unlock(mutex_t* mutex);
 ```c
 typedef struct {
     socket_t client_socket;    // Socket for this client
-    int thread_id;             // Thread identifier  
+    int thread_id;             // Thread identifier
     void* user_data;           // Custom data (callbacks, etc.)
 } client_context_t;
 ```
@@ -389,46 +422,47 @@ Mỗi thread nhận một `client_context_t` chứa tất cả thông tin cần 
 ```c
 void* server_accept_loop(void* context) {
     server_context_t* ctx = (server_context_t*)context;
-    
+
     while (ctx->running) {
         // ========== BLOCKING ACCEPT ==========
         // Waits for incoming client connection
         socket_t client_socket = socket_accept_client(ctx->server_socket);
-        
+
         if (client_socket == INVALID_SOCKET) {
             if (ctx->running) continue;
             break;
         }
-        
+
         // ========== UPDATE CLIENT COUNT (Thread-safe) ==========
         mutex_lock(&ctx->clients_mutex);
         ctx->active_clients++;
         int client_id = ctx->active_clients;
         mutex_unlock(&ctx->clients_mutex);
-        
+
         // ========== CREATE CLIENT CONTEXT ==========
         client_context_t* client_ctx = malloc(sizeof(client_context_t));
         client_ctx->client_socket = client_socket;
         client_ctx->thread_id = client_id;
         client_ctx->user_data = ctx->user_data;
-        
+
         // ========== SPAWN NEW THREAD ==========
         // Each client gets its own thread!
         if (thread_create_client_handler(ctx->handler, client_ctx) != 0) {
             free(client_ctx);
             socket_close(client_socket);
-            
+
             mutex_lock(&ctx->clients_mutex);
             ctx->active_clients--;
             mutex_unlock(&ctx->clients_mutex);
         }
     }
-    
+
     return NULL;
 }
 ```
 
 **📝 Key Points:**
+
 - **Main loop** chạy trong dedicated thread
 - **accept()** blocks cho đến khi client connects
 - **Mutex** bảo vệ shared variable (`active_clients`)
@@ -442,7 +476,7 @@ void* server_accept_loop(void* context) {
 **File:** `src/network/core/thread_pool.c` (line 7-48)
 
 ```c
-int thread_create_client_handler(client_handler_func handler, 
+int thread_create_client_handler(client_handler_func handler,
                                  client_context_t* context) {
 #ifdef _WIN32
     // ========== WINDOWS THREADING ==========
@@ -454,27 +488,27 @@ int thread_create_client_handler(client_handler_func handler,
         0,                                  // Creation flags
         NULL                                // Thread ID (don't need)
     );
-    
+
     if (thread == NULL) return -1;
-    
+
     // Detach thread (auto cleanup when exits)
     CloseHandle(thread);
     return 0;
-    
+
 #else
     // ========== POSIX THREADING (Linux/macOS) ==========
     pthread_t thread;
     pthread_attr_t attr;
-    
+
     // Initialize attributes
     pthread_attr_init(&attr);
-    
+
     // Set DETACHED state (auto cleanup)
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    
+
     // Create thread
     int result = pthread_create(&thread, &attr, handler, context);
-    
+
     pthread_attr_destroy(&attr);
     return (result == 0) ? 0 : -1;
 #endif
@@ -482,8 +516,9 @@ int thread_create_client_handler(client_handler_func handler,
 ```
 
 **📝 Key Points:**
+
 - **Windows**: `CreateThread()` API
-- **POSIX**: `pthread_create()` API  
+- **POSIX**: `pthread_create()` API
 - **Detached threads**: Tự cleanup khi exit (không cần `pthread_join()`)
 - **Return 0** on success, **-1** on failure
 
@@ -523,6 +558,7 @@ int mutex_unlock(mutex_t* mutex) {
 ```
 
 **📝 Khi nào cần Mutex?**
+
 - Shared variables giữa nhiều threads
 - Client count, client list, statistics
 - **Critical section**: Code chỉ 1 thread được chạy tại một thời điểm
@@ -575,14 +611,14 @@ def start_server(self, port=5555):
         # ========== I/O: Create Server Socket ==========
         self.server_socket = self.proto.create_server(port)
         self.server_running = True
-        
+
         # ========== I/O: Start Accept Thread ==========
         # Main thread handles GUI
         # Background thread handles I/O
         threading.Thread(target=self.accept_clients, daemon=True).start()
-        
+
         self.append_log(f"[OK] Server started on port {port}")
-        
+
     except Exception as e:
         self.append_log(f"✗ Failed to start server: {str(e)}")
 
@@ -594,7 +630,7 @@ def accept_clients(self):
             # This blocks until a client connects
             client_socket = self.proto.accept_client(self.server_socket)
             self.append_log(f"[OK] New connection from client")
-            
+
             # ========== I/O: Spawn Handler Thread ==========
             # Each client gets its own thread for I/O
             # Server can handle multiple clients simultaneously
@@ -603,7 +639,7 @@ def accept_clients(self):
                 args=(client_socket,),
                 daemon=True
             ).start()
-            
+
         except Exception as e:
             if self.server_running:
                 self.append_log(f"✗ Accept error: {str(e)}")
@@ -659,30 +695,30 @@ def handle_client(self, client_socket):
         # BLOCKING recv() - waits for client to send
         request = self.proto.receive_message(client_socket)
         msg_type = request['message_type']
-        
+
         if msg_type == MSG_REGISTER_REQ:
             self.handlers.handle_register(client_socket, request)
-            
+
         elif msg_type == MSG_LOGIN_REQ:
             session_token = self.handlers.handle_login(client_socket, request)
-            
+
             if session_token:
                 session = self.session_mgr.validate_session(session_token)
-                
+
                 # Register client
                 self.clients[client_socket] = {
                     'username': session['username'],
                     'role': session['role'],
                     'status': 'connected'
                 }
-                
+
                 # ========== I/O: Request Loop based on Role ==========
                 if session['role'] == 'student':
                     self._handle_student_requests(client_socket, session)
                 else:
                     self.handlers.handle_teacher_data(client_socket, session)
                     self._handle_teacher_requests(client_socket, session)
-                    
+
     except Exception as e:
         self.log(f"✗ Client error: {str(e)}")
     finally:
@@ -699,14 +735,14 @@ def _handle_student_requests(self, client_socket, session):
             # ========== I/O: BLOCKING Receive ==========
             request = self.proto.receive_message(client_socket)
             msg_type = request['message_type']
-            
+
             # ========== I/O: Route and Respond ==========
             if msg_type == MSG_JOIN_ROOM_REQ:
                 handle_join_room(client_socket, session, request)
             elif msg_type == MSG_GET_STUDENT_ROOMS_REQ:
                 handle_get_student_rooms(client_socket, session)
             # ... more message types
-            
+
         except Exception as e:
             break  # Connection closed or error
 ```
@@ -724,14 +760,14 @@ def _handle_student_requests(self, client_socket, session):
 
 ### **✅ Kết luận Socket I/O trên Server:**
 
-| Component | Implementation | File |
-|-----------|---------------|------|
-| **Socket Creation** | `socket()` + `bind()` + `listen()` | `socket_ops.c:35-71` |
-| **Connection Accept** | `accept()` blocking call | `socket_ops.c:73-88` |
-| **Multi-client Support** | Threading - 1 thread/client | `server_gui.py:190-206` |
-| **Request Loop** | BLOCKING `recv()` in while loop | `client_handler.py:43-92` |
-| **Send/Recv** | Complete transmission handling | `socket_ops.c:128-154` |
-| **Connection Management** | Cleanup in finally block | `client_handler.py:83-88` |
+| Component                 | Implementation                     | File                      |
+| ------------------------- | ---------------------------------- | ------------------------- |
+| **Socket Creation**       | `socket()` + `bind()` + `listen()` | `socket_ops.c:35-71`      |
+| **Connection Accept**     | `accept()` blocking call           | `socket_ops.c:73-88`      |
+| **Multi-client Support**  | Threading - 1 thread/client        | `server_gui.py:190-206`   |
+| **Request Loop**          | BLOCKING `recv()` in while loop    | `client_handler.py:43-92` |
+| **Send/Recv**             | Complete transmission handling     | `socket_ops.c:128-154`    |
+| **Connection Management** | Cleanup in finally block           | `client_handler.py:83-88` |
 
 ---
 
@@ -739,11 +775,11 @@ def _handle_student_requests(self, client_socket, session):
 
 ## 📊 Summary: 3 Requirements Implementation
 
-| Requirement | Implementation | Files | Score |
-|------------|----------------|-------|-------|
-| **1. Stream Handling** | Fixed 64-byte header + length field | `protocol.h:12-23`<br>`protocol.c:83-122`<br>`socket_ops.c:128-154` | 1/1 ✅ |
-| **2. Server Socket I/O** | socket/bind/listen/accept<br>BLOCKING recv/send | `socket_ops.c:35-88`<br>`socket_ops.c:128-154` | 2/2 ✅ |
-| **3. Multi-threading (C)** | Thread-per-client<br>Cross-platform (Windows/POSIX)<br>Mutex synchronization | `thread_pool.h:29-181`<br>`thread_pool.c:7-189` | 2/2 ✅ |
+| Requirement                | Implementation                                                               | Files                                                               | Score  |
+| -------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------ |
+| **1. Stream Handling**     | Fixed 88-byte header + length field                                          | `protocol.h:12-23`<br>`protocol.c:83-122`<br>`socket_ops.c:128-154` | 1/1 ✅ |
+| **2. Server Socket I/O**   | socket/bind/listen/accept<br>BLOCKING recv/send                              | `socket_ops.c:35-88`<br>`socket_ops.c:128-154`                      | 2/2 ✅ |
+| **3. Multi-threading (C)** | Thread-per-client<br>Cross-platform (Windows/POSIX)<br>Mutex synchronization | `thread_pool.h:29-181`<br>`thread_pool.c:7-189`                     | 2/2 ✅ |
 
 **Total: 5/5 điểm** 🎉
 
@@ -752,18 +788,21 @@ def _handle_student_requests(self, client_socket, session):
 ## 🎓 Network Programming Concepts Demonstrated
 
 ### **1. Transport Layer (TCP)**
+
 ✅ 3-way handshake (automatic in `accept()` and `connect()`)
 ✅ Reliable delivery (TCP guarantees)
 ✅ Connection-oriented (maintain state)
 ✅ Flow control (TCP window management)
 
 ### **2. Application Layer (TAP Protocol)**
+
 ✅ Custom protocol design (fixed header + payload)
 ✅ Message framing (solving byte stream problem)
 ✅ Protocol versioning (for future compatibility)
 ✅ Session management (authentication tokens)
 
 ### **3. Concurrency & Multi-threading**
+
 ✅ Multi-threaded server **implemented in C** (thread_pool.c)
 ✅ Thread-per-client architecture
 ✅ Cross-platform threading (Windows `CreateThread` / POSIX `pthread`)
@@ -773,11 +812,13 @@ def _handle_student_requests(self, client_socket, session):
 ✅ Resource cleanup (close sockets, free memory)
 
 ### **4. Network Byte Order**
+
 ✅ `htons()` / `htonl()` for sending
 ✅ `ntohs()` / `ntohl()` for receiving
 ✅ Big-endian (network standard)
 
 ### **5. Cross-platform**
+
 ✅ Windows Winsock vs POSIX sockets
 ✅ Conditional compilation (`#ifdef _WIN32`)
 ✅ Platform-specific types (`socket_t`)
@@ -811,18 +852,21 @@ src/python/server/
 ## 🎯 Đánh giá theo Rubric
 
 ### ✅ **1. Xử lý luồng (Stream handling): 1 điểm**
-- Fixed header (64 bytes) cho message framing
+
+- Fixed header (88 bytes) cho message framing
 - Length field để biết payload size
 - Guaranteed complete send/receive
 - Handling partial transmission
 - Network byte order conversion
 
 **Evidence:**
+
 - `protocol.c:83-122` - Complete receive logic
 - `socket_ops.c:128-145` - Loop until all sent
 - `protocol.h:12-23` - Header structure
 
 ### ✅ **2. Cài đặt cơ chế I/O qua socket trên máy chủ: 2 điểm**
+
 - Server socket creation (`socket()`, `bind()`, `listen()`)
 - Accept client connections (`accept()`)
 - Multi-threaded I/O (1 thread per client)
@@ -830,6 +874,7 @@ src/python/server/
 - Proper connection cleanup
 
 **Evidence:**
+
 - `socket_ops.c:35-88` - Server socket creation, bind, listen, accept
 - `socket_ops.c:128-154` - Blocking send/receive with complete transmission
 - `protocol.c:52-122` - Protocol-level I/O with framing
@@ -837,6 +882,7 @@ src/python/server/
 ### ✅ **3. Multi-threading Server trong C: 2 điểm** ⭐
 
 **Implemented:**
+
 - Thread-per-client architecture
 - Cross-platform threading (Windows `CreateThread` / POSIX `pthread_create`)
 - Accept loop in dedicated thread
@@ -845,6 +891,7 @@ src/python/server/
 - Detached threads (automatic cleanup)
 
 **Evidence:**
+
 - `thread_pool.h:29-181` - Threading API definitions
 - `thread_pool.c:7-48` - Cross-platform thread creation
 - `thread_pool.c:70-108` - Mutex implementation
@@ -855,6 +902,7 @@ src/python/server/
 ## 🚀 Demo Instructions
 
 ### Build & Run:
+
 ```bash
 # Build C library
 ./build.bat  # Windows
@@ -871,6 +919,7 @@ python main.py
 ```
 
 ### Test Stream Handling:
+
 1. Login as teacher/student
 2. Create test room (generates large JSON payload)
 3. Monitor server logs → See complete message transmission
@@ -881,13 +930,14 @@ python main.py
 ## 📚 References
 
 **C Network Programming:**
+
 - Beej's Guide to Network Programming
 - Unix Network Programming (Stevens)
 - TCP/IP Illustrated (Stevens)
 
 **Our Implementation:**
+
 - Clean layered architecture
 - Well-documented code
 - Educational comments
 - Industry best practices
-

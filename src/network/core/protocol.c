@@ -59,7 +59,7 @@ int protocol_send_message(socket_t socket, uint16_t msg_type,
     // Step 1: Initialize header
     protocol_init_header(&header, msg_type, payload_length, session_token);
     
-    // Step 2: Send header (64 bytes fixed)
+    // Step 2: Send header
     // Network Programming Note:
     // We send the header as-is since multi-byte fields are already
     // in network byte order (big-endian) from init_header()
@@ -82,10 +82,10 @@ int protocol_send_message(socket_t socket, uint16_t msg_type,
 
 int protocol_receive_message(socket_t socket, protocol_header_t* header,
                              char* payload, int max_payload_size) {
-    // Step 1: Receive header (64 bytes fixed)
+    // Step 1: Receive fixed header
     // Network Programming Note:
     // TCP is a byte stream protocol, not message-based.
-    // We need to receive exactly 64 bytes for the header.
+    // We need to receive exactly sizeof(protocol_header_t) bytes.
     int bytes_received = socket_receive_data(socket, (char*)header, sizeof(protocol_header_t));
     if (bytes_received != sizeof(protocol_header_t)) {
         return -1;  // Header receive failed or connection closed

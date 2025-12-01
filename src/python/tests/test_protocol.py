@@ -73,7 +73,7 @@ def test_protocol():
     print(f"   Register Payload: {json.dumps(register_payload, indent=2)}")
     
     print("\n5. Protocol Features...")
-    print("   ✓ Binary header (64 bytes)")
+    print("   ✓ Binary header (88 bytes with padding)")
     print("   ✓ Message type codes (16-bit)")
     print("   ✓ Payload length field (32-bit, max 1MB)")
     print("   ✓ Message ID (16 bytes UUID)")
