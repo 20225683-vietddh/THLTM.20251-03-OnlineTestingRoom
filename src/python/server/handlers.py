@@ -15,6 +15,7 @@ from protocol_wrapper import (
     MSG_ADD_QUESTION_RES, MSG_GET_QUESTIONS_RES, MSG_DELETE_QUESTION_RES,
     MSG_JOIN_ROOM_RES, MSG_GET_STUDENT_ROOMS_RES, MSG_GET_AVAILABLE_ROOMS_RES,
     MSG_START_ROOM_TEST_RES, MSG_SUBMIT_ROOM_TEST_RES,
+    MSG_AUTO_SAVE_RES,
     ERR_SUCCESS, ERR_BAD_REQUEST, ERR_INVALID_CREDS,
     ERR_USERNAME_EXISTS, ERR_INTERNAL
 )
@@ -811,4 +812,47 @@ class RequestHandlers:
         except Exception as e:
             self.log(f"✗ Submit room test error: {str(e)}")
             self.send_error(client_socket, ERR_INTERNAL, str(e))
+    
+    def handle_auto_save(self, client_socket, session, request):
+        """Handle periodic auto-save from client"""
+        try:
+            payload = request.get('payload', {})
+            room_id = payload.get('room_id')
+            answers = payload.get('answers', [])
+            is_final = payload.get('is_final', False)
+            
+            if not room_id:
+                # Silent fail - don't block client
+                return
+            
+            # Get user
+            user = self.db.get_user_by_username(session['username'])
+            if not user:
+                return
+            
+            # Save progress to database
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            
+            # Use REPLACE to overwrite previous saves
+            cursor.execute('''
+                REPLACE INTO test_progress (room_id, student_id, answers_json, is_final)
+                VALUES (?, ?, ?, ?)
+            ''', (room_id, user['id'], json.dumps(answers), is_final))
+            
+            conn.commit()
+            conn.close()
+            
+            # Send ACK
+            self.send_response(client_socket, MSG_AUTO_SAVE_RES, {
+                'code': ERR_SUCCESS,
+                'message': 'Progress saved',
+                'timestamp': self.proto.lib.py_get_unix_timestamp()
+            })
+            
+            self.log(f"[AUTO-SAVE] {session['username']} - Room {room_id} - {len(answers)} answers")
+            
+        except Exception as e:
+            # Don't send error - silent fail to not disrupt client
+            self.log(f"⚠️ Auto-save error (non-critical): {str(e)}")
 

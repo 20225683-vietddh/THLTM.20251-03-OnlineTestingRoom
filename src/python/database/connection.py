@@ -137,6 +137,21 @@ class Database:
             )
         ''')
         
+        # Test progress table (for auto-save)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS test_progress (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                room_id INTEGER NOT NULL,
+                student_id INTEGER NOT NULL,
+                answers_json TEXT NOT NULL,
+                saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_final BOOLEAN DEFAULT 0,
+                FOREIGN KEY (room_id) REFERENCES test_rooms(id),
+                FOREIGN KEY (student_id) REFERENCES users(id),
+                UNIQUE(room_id, student_id)
+            )
+        ''')
+        
         conn.commit()
         conn.close()
         

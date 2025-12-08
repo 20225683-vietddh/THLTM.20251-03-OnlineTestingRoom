@@ -52,3 +52,5 @@ desktop.ini
 # Logs
 *.log
 
+# Cache
+cache/

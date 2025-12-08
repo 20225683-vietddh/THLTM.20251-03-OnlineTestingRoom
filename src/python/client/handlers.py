@@ -17,7 +17,8 @@ from protocol_wrapper import (
     MSG_GET_STUDENT_ROOMS_REQ, MSG_GET_STUDENT_ROOMS_RES,
     MSG_GET_AVAILABLE_ROOMS_REQ, MSG_GET_AVAILABLE_ROOMS_RES,
     MSG_START_ROOM_TEST_REQ, MSG_START_ROOM_TEST_RES,
-    MSG_SUBMIT_ROOM_TEST_REQ, MSG_SUBMIT_ROOM_TEST_RES
+    MSG_SUBMIT_ROOM_TEST_REQ, MSG_SUBMIT_ROOM_TEST_RES,
+    MSG_AUTO_SAVE_REQ, MSG_AUTO_SAVE_RES
 )
 
 
@@ -269,6 +270,7 @@ class StudentHandler:
         self.conn = connection
         self.ui = ui_callbacks
         self.questions = []
+        self.auto_save_in_progress = False  # Track auto-save state
         
     def join_room(self, room_id):
         """Join a test room by room ID"""
@@ -354,8 +356,8 @@ class StudentHandler:
         except Exception as e:
             raise Exception(f"Failed to get available rooms: {str(e)}")
     
-    def start_room_test(self, room_id):
-        """Start test for a specific room"""
+    def start_room_test(self, room_id, cached_data=None):
+        """Start test for a specific room (optionally resume from cache)"""
         try:
             # Send start room test request
             self.conn.send_message(MSG_START_ROOM_TEST_REQ, {
@@ -377,9 +379,9 @@ class StudentHandler:
                     duration = data.get('duration_minutes', 30)
                     room_name = data.get('room_name', 'Test Room')
                     
-                    # Show test screen via UI callback
+                    # Show test screen via UI callback (with cached data if resuming)
                     self.questions = questions
-                    self.ui['show_test'](questions, duration)
+                    self.ui['show_test'](questions, duration, room_id, cached_data)
                     
                     return {
                         'success': True,
@@ -398,6 +400,18 @@ class StudentHandler:
     def submit_room_test(self, room_id, answers):
         """Submit test answers for a room"""
         try:
+            # Wait for any ongoing auto-save to complete
+            import time
+            max_wait = 3  # Max 3 seconds
+            waited = 0
+            while self.auto_save_in_progress and waited < max_wait:
+                print(f"[SUBMIT] Waiting for auto-save to complete... ({waited}s)")
+                time.sleep(0.5)
+                waited += 0.5
+            
+            if self.auto_save_in_progress:
+                print("⚠️ [SUBMIT] Auto-save still in progress, proceeding anyway...")
+            
             # Send submit request
             self.conn.send_message(MSG_SUBMIT_ROOM_TEST_REQ, {
                 'room_id': room_id,
@@ -492,4 +506,44 @@ class StudentHandler:
             
         except Exception as e:
             raise Exception(f"Failed to submit test: {str(e)}")
+    
+    def auto_save(self, room_id, answers, is_final=False):
+        """Auto-save test progress to server"""
+        if self.auto_save_in_progress:
+            print("⚠️ Auto-save already in progress, skipping...")
+            return False
+        
+        try:
+            self.auto_save_in_progress = True
+            
+            # Send auto-save request
+            self.conn.send_message(MSG_AUTO_SAVE_REQ, {
+                'room_id': room_id,
+                'answers': answers,
+                'is_final': is_final
+            })
+            
+            # Consume response quickly (with short timeout)
+            import socket
+            old_timeout = self.conn.socket.gettimeout()
+            try:
+                self.conn.socket.settimeout(1.0)  # 1s timeout
+                response = self.conn.receive_message()
+                
+                if response['message_type'] == MSG_AUTO_SAVE_RES:
+                    print("[AUTO-SAVE] Server acknowledged")
+                    return True
+            except socket.timeout:
+                print("⚠️ Auto-save timeout (non-critical)")
+                return False
+            finally:
+                self.conn.socket.settimeout(old_timeout)
+                self.auto_save_in_progress = False
+            
+            return False
+            
+        except Exception as e:
+            print(f"⚠️ Auto-save error: {e}")
+            self.auto_save_in_progress = False
+            return False
 

@@ -12,7 +12,8 @@ from protocol_wrapper import (
     MSG_START_ROOM_REQ, MSG_END_ROOM_REQ,
     MSG_ADD_QUESTION_REQ, MSG_GET_QUESTIONS_REQ, MSG_DELETE_QUESTION_REQ,
     MSG_JOIN_ROOM_REQ, MSG_GET_STUDENT_ROOMS_REQ, MSG_GET_AVAILABLE_ROOMS_REQ,
-    MSG_START_ROOM_TEST_REQ, MSG_SUBMIT_ROOM_TEST_REQ
+    MSG_START_ROOM_TEST_REQ, MSG_SUBMIT_ROOM_TEST_REQ,
+    MSG_AUTO_SAVE_REQ
 )
 
 
@@ -114,6 +115,9 @@ class ClientHandler:
                 
                 elif msg_type == MSG_SUBMIT_ROOM_TEST_REQ:
                     self.handlers.handle_submit_room_test(client_socket, session, request)
+                
+                elif msg_type == MSG_AUTO_SAVE_REQ:
+                    self.handlers.handle_auto_save(client_socket, session, request)
                 
                 else:
                     self.handlers.send_error(client_socket, 2000, "Invalid request type")

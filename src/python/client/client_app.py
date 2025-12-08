@@ -180,7 +180,7 @@ class TestClientApp(ctk.CTk):
             # Create handler first
             self.student_handler = StudentHandler(self.conn, {
                 'show_ready': lambda fn, nq, d: self.student_window.show_ready_screen(fn, nq, d),
-                'show_test': lambda q, d: self.student_window.show_test_screen(q, d),
+                'show_test': lambda q, d, r=None, c=None: self.student_window.show_test_screen(q, d, r, c),
                 'show_result': lambda r: self.student_window.show_result_screen(r, full_name)
             })
             
@@ -192,7 +192,8 @@ class TestClientApp(ctk.CTk):
                 'on_enter_room': self.handle_enter_room,
                 'on_refresh_rooms': self.handle_refresh_student_rooms,
                 'on_refresh_available': self.handle_refresh_available_rooms,
-                'on_logout': self.handle_logout
+                'on_logout': self.handle_logout,
+                'on_auto_save': self.handle_auto_save
             })
             
             # Show room lobby
@@ -350,14 +351,54 @@ class TestClientApp(ctk.CTk):
             # Store current room ID for submission
             self.current_room_id = room_id
             
-            # Request test from server
-            result = self.student_handler.start_room_test(room_id)
+            # Check for cached progress first
+            import os
+            import json
+            cache_file = f'cache/test_{room_id}.json'
+            cached_data = None
+            
+            if os.path.exists(cache_file):
+                try:
+                    with open(cache_file, 'r') as f:
+                        cached = json.load(f)
+                    
+                    # Show resume dialog
+                    from tkinter import messagebox
+                    from datetime import datetime
+                    
+                    cached_time = datetime.fromisoformat(cached['timestamp'])
+                    time_str = cached_time.strftime('%H:%M:%S %d/%m/%Y')
+                    answered_count = sum(1 for a in cached['answers'] if a.get('selected', -1) != -1)
+                    
+                    resume = messagebox.askyesno(
+                        "Resume Test?",
+                        f"Found unsaved progress from {time_str}\n"
+                        f"Answered: {answered_count}/{cached['questions_count']} questions\n\n"
+                        f"Do you want to resume from where you left off?"
+                    )
+                    
+                    if resume:
+                        cached_data = cached
+                        print(f"[RESUME] Will restore {answered_count} answered questions")
+                except Exception as e:
+                    print(f"Error loading cache: {e}")
+            
+            # Request test from server (with cached data if resuming)
+            result = self.student_handler.start_room_test(room_id, cached_data)
             
             if not result.get('success'):
                 self.show_error("Start Test Error", result.get('message', 'Failed to start test'))
                 
         except Exception as e:
             self.show_error("Enter Room Error", str(e))
+    
+    def handle_auto_save(self, room_id, answers, is_final):
+        """Handle auto-save request"""
+        try:
+            self.student_handler.auto_save(room_id, answers, is_final)
+        except Exception as e:
+            # Silent fail - don't disrupt user
+            print(f"⚠️ Auto-save failed: {e}")
     
     def handle_logout(self):
         """Handle logout"""

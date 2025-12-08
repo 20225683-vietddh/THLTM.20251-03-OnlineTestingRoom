@@ -35,6 +35,14 @@ class StudentWindow:
         self.test_duration = 30
         self.start_time = None
         self.timer_running = False
+        self.room_id = None
+        
+        # Auto-save state
+        self.auto_save_interval = 10  # seconds (save every 10s)
+        self.last_save_time = None
+        self.auto_save_running = False
+        self.auto_save_task_id = None  # Store scheduled task ID
+        self.is_submitting = False  # Flag to prevent auto-save during submit
         
         # UI components
         self.timer_label = None
@@ -379,13 +387,57 @@ class StudentWindow:
             hover_color="darkgreen"
         ).pack(pady=20)
     
-    def show_test_screen(self, questions, duration):
+    def show_test_screen(self, questions, duration, room_id=None, cached_data=None):
         """Show test screen with questions"""
         self.questions = questions
         self.test_duration = duration
-        self.answers = [{"question_id": q["id"], "selected": -1} for q in questions]
-        self.start_time = datetime.now()
+        self.room_id = room_id
+        
+        # Check if resuming from cache
+        if cached_data:
+            cached_answers = cached_data.get('answers', [])
+            
+            # Rebuild answers array to match question order
+            # Map cached answers by question_id
+            cached_map = {a['question_id']: a['selected'] for a in cached_answers}
+            
+            # Create new answers array matching question order
+            self.answers = []
+            for q in questions:
+                question_id = q['id']
+                # Use cached value if exists, otherwise -1 (not answered)
+                selected = cached_map.get(question_id, -1)
+                self.answers.append({"question_id": question_id, "selected": selected})
+            
+            # Restore current question
+            self.current_question = cached_data.get('current_question', 0)
+            # Clamp to valid range
+            if self.current_question >= len(questions):
+                self.current_question = len(questions) - 1
+            
+            # Restore start time (to calculate remaining time correctly)
+            cached_timestamp = cached_data.get('timestamp')
+            if cached_timestamp:
+                cached_time = datetime.fromisoformat(cached_timestamp)
+                # Calculate how much time has passed since cache
+                elapsed_from_cache = datetime.now() - cached_time
+                # Adjust start time
+                self.start_time = datetime.now() - elapsed_from_cache
+            else:
+                self.start_time = datetime.now()
+            
+            answered_count = len([a for a in self.answers if a.get('selected', -1) != -1])
+            print(f"[RESUME] Restored {answered_count}/{len(questions)} answers")
+            print(f"[RESUME] Current question: {self.current_question + 1}")
+            print(f"[RESUME] Elapsed time: {elapsed_from_cache if cached_timestamp else 'N/A'}")
+        else:
+            # Fresh start
+            self.answers = [{"question_id": q["id"], "selected": -1} for q in questions]
+            self.current_question = 0
+            self.start_time = datetime.now()
+        
         self.timer_running = True
+        self.auto_save_running = True
         
         # Clear parent
         for widget in self.parent.winfo_children():
@@ -447,6 +499,9 @@ class StudentWindow:
         
         # Start timer
         self._update_timer()
+        
+        # Start auto-save
+        self._start_auto_save()
     
     def display_question(self):
         """Display current question"""
@@ -500,6 +555,13 @@ class StudentWindow:
     def _save_answer(self, selected):
         """Save selected answer"""
         self.answers[self.current_question]["selected"] = selected
+        
+        # Save to local cache immediately (don't wait for auto-save)
+        try:
+            self._save_local_cache()
+        except Exception as e:
+            print(f"⚠️ Failed to save cache on answer change: {e}")
+        
         if self.callbacks.get('on_answer_change'):
             self.callbacks['on_answer_change'](self.current_question, selected)
     
@@ -548,12 +610,126 @@ class StudentWindow:
     
     def _handle_submit(self):
         """Handle submit test button"""
+        # Set submitting flag to prevent auto-save
+        self.is_submitting = True
+        
+        # Stop timers first
         self.timer_running = False
+        self.auto_save_running = False
+        
+        # Cancel any pending auto-save task
+        if self.auto_save_task_id:
+            try:
+                self.parent.after_cancel(self.auto_save_task_id)
+                self.auto_save_task_id = None
+                print("[SUBMIT] Cancelled pending auto-save task")
+            except:
+                pass
+        
+        # Wait a moment to ensure auto-save is done
+        import time
+        time.sleep(0.1)
+        
+        # Now submit
         if self.callbacks.get('on_submit_test'):
             self.callbacks['on_submit_test'](self.answers)
     
+    def _start_auto_save(self):
+        """Start periodic auto-save"""
+        if not self.room_id:
+            return  # Only auto-save for room tests
+        
+        self.auto_save_running = True
+        self._auto_save_task()
+    
+    def _auto_save_task(self):
+        """Auto-save answers every 30s"""
+        # Don't auto-save if already stopped or submitting
+        if not self.auto_save_running or not self.timer_running or self.is_submitting:
+            return
+        
+        # Don't auto-save in last 10 seconds (to avoid conflict with submit)
+        if self.start_time:
+            elapsed = datetime.now() - self.start_time
+            remaining = timedelta(minutes=self.test_duration) - elapsed
+            if remaining.total_seconds() < 10:
+                print("[AUTO-SAVE] Skipped (less than 10s remaining, avoiding submit conflict)")
+                return
+        
+        try:
+            # Save to local cache first
+            self._save_local_cache()
+            
+            # Try save to server
+            if self.callbacks.get('on_auto_save'):
+                self.callbacks['on_auto_save'](
+                    room_id=self.room_id,
+                    answers=self.answers,
+                    is_final=False
+                )
+            
+            self.last_save_time = datetime.now()
+            answered = len([a for a in self.answers if a.get('selected', -1) != -1])
+            print(f"[AUTO-SAVE] Saved {answered}/{len(self.answers)} answers at {self.last_save_time.strftime('%H:%M:%S')}")
+            
+        except Exception as e:
+            print(f"⚠️ Auto-save failed: {e}")
+            # Don't crash, just log
+        
+        # Schedule next save
+        if self.auto_save_running:
+            self.auto_save_task_id = self.parent.after(
+                self.auto_save_interval * 1000, 
+                self._auto_save_task
+            )
+    
+    def _save_local_cache(self):
+        """Save answers to local file (backup)"""
+        if not self.room_id:
+            return
+        
+        import json
+        import os
+        
+        cache_data = {
+            'room_id': self.room_id,
+            'answers': self.answers,
+            'timestamp': datetime.now().isoformat(),
+            'questions_count': len(self.questions),
+            'current_question': self.current_question
+        }
+        
+        cache_dir = 'cache'
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        cache_file = os.path.join(cache_dir, f'test_{self.room_id}.json')
+        
+        with open(cache_file, 'w') as f:
+            json.dump(cache_data, f, indent=2)
+        
+        print(f"[CACHE] Saved to {cache_file}")
+    
+    def clear_local_cache(self):
+        """Clear local cache after successful submit"""
+        if not self.room_id:
+            return
+        
+        import os
+        
+        cache_file = os.path.join('cache', f'test_{self.room_id}.json')
+        
+        try:
+            if os.path.exists(cache_file):
+                os.remove(cache_file)
+                print(f"[CACHE] Cleared {cache_file}")
+        except Exception as e:
+            print(f"⚠️ Failed to clear cache: {e}")
+    
     def show_result_screen(self, result, full_name):
         """Show test result"""
+        # Clear local cache (submit successful)
+        self.clear_local_cache()
+        
         # Clear parent
         for widget in self.parent.winfo_children():
             widget.destroy()
