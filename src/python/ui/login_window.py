@@ -15,7 +15,7 @@ class LoginWindow:
             parent: Parent frame to pack widgets into
             callbacks: Dict with callback functions
                 - on_login: callback(username, password, role)
-                - on_back: callback()
+                - on_register: callback()
                 - on_status: callback(message, color)
         """
         self.parent = parent
@@ -101,14 +101,16 @@ class LoginWindow:
             hover_color="darkgreen"
         ).pack(pady=20)
         
-        # Back button
+        # Register button
         ctk.CTkButton(
             self.frame,
-            text="← Back",
-            command=self._handle_back,
-            width=100,
-            fg_color="gray",
-            hover_color="darkgray"
+            text="📝 Create New Account",
+            command=self._handle_register,
+            width=300,
+            height=35,
+            font=("Arial", 13),
+            fg_color="blue",
+            hover_color="darkblue"
         ).pack(pady=5)
         
         # Status label
@@ -132,10 +134,10 @@ class LoginWindow:
         if self.callbacks.get('on_login'):
             self.callbacks['on_login'](username, password, role)
     
-    def _handle_back(self):
-        """Handle back button click"""
-        if self.callbacks.get('on_back'):
-            self.callbacks['on_back']()
+    def _handle_register(self):
+        """Handle register button click"""
+        if self.callbacks.get('on_register'):
+            self.callbacks['on_register']()
     
     def show_status(self, message, color="yellow"):
         """Show status message"""

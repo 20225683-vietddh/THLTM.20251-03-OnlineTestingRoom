@@ -99,10 +99,37 @@ class TestClientApp(ctk.CTk):
                 self.login_window.show_status(f"✗ Error: {str(e)}", "red")
             return False
     
-    def handle_register(self, username, password, role, full_name, email):
-        """Handle registration (not implemented - use server's register)"""
-        if self.register_window:
-            self.register_window.show_status("Registration not implemented in client", "orange")
+    def handle_register(self, username, password, full_name, email, role):
+        """Handle registration"""
+        try:
+            # Connect to server if not connected
+            if not self.conn.connected:
+                self.conn.connect()
+            
+            # Register
+            result = self.conn.register(username, password, full_name, email, role)
+            
+            if result['success']:
+                if self.register_window:
+                    self.register_window.show_status(
+                        f"✓ {result['message']}! Please login.", 
+                        "green"
+                    )
+                # Auto-switch to login after 2 seconds
+                self.after(2000, self.show_login)
+                return True
+            else:
+                if self.register_window:
+                    self.register_window.show_status(
+                        f"✗ {result['message']}", 
+                        "red"
+                    )
+                return False
+                
+        except Exception as e:
+            if self.register_window:
+                self.register_window.show_status(f"✗ Error: {str(e)}", "red")
+            return False
     
     def show_teacher_dashboard(self, full_name):
         """Show teacher dashboard"""

@@ -2,7 +2,12 @@
 Connection Manager
 Handles server connection and protocol communication
 """
-from protocol_wrapper import ProtocolWrapper, MSG_LOGIN_REQ, MSG_LOGIN_RES, MSG_ERROR
+from protocol_wrapper import (
+    ProtocolWrapper, 
+    MSG_LOGIN_REQ, MSG_LOGIN_RES, 
+    MSG_REGISTER_REQ, MSG_REGISTER_RES,
+    MSG_ERROR
+)
 
 
 class ConnectionManager:
@@ -29,6 +34,52 @@ class ConnectionManager:
         except Exception as e:
             raise ConnectionError(f"Failed to connect to server: {str(e)}")
     
+    def register(self, username, password, full_name, email, role):
+        """Register new account"""
+        if not self.connected:
+            raise ConnectionError("Not connected to server")
+        
+        try:
+            # Send register request
+            self.proto.send_message(self.socket, MSG_REGISTER_REQ, {
+                'username': username,
+                'password': password,
+                'full_name': full_name,
+                'email': email if email else "",
+                'role': role
+            }, use_session=False)
+            
+            # Receive response
+            response = self.proto.receive_message(self.socket)
+            
+            # Check for error
+            if response['message_type'] == MSG_ERROR:
+                error_msg = response['payload'].get('message', 'Unknown error')
+                raise ValueError(error_msg)
+            
+            # Check register success
+            if response['message_type'] == MSG_REGISTER_RES:
+                payload = response['payload']
+                code = payload.get('code')
+                
+                if code == 1000:  # ERR_SUCCESS
+                    return {
+                        'success': True,
+                        'message': payload.get('message', 'Registration successful'),
+                        'user_id': payload.get('user_id')
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'message': payload.get('message', 'Registration failed')
+                    }
+            
+            return {'success': False, 'message': 'Unexpected response'}
+        finally:
+            # Server closes connection after register (success or fail)
+            # Force disconnect so we reconnect next time
+            self.disconnect()
+    
     def login(self, username, password, role):
         """Login to server"""
         if not self.connected:
@@ -47,6 +98,8 @@ class ConnectionManager:
         # Check for error
         if response['message_type'] == MSG_ERROR:
             error_msg = response['payload'].get('message', 'Unknown error')
+            # Server closes connection on error
+            self.disconnect()
             raise ValueError(error_msg)
         
         # Check login success
@@ -64,8 +117,12 @@ class ConnectionManager:
                     'session_token': self.session_token
                 }
             else:
+                # Login failed - server closes connection
+                self.disconnect()
                 return {'success': False, 'message': payload.get('message', 'Login failed')}
         
+        # Unexpected response
+        self.disconnect()
         return {'success': False, 'message': 'Unexpected response'}
     
     def receive_message(self):
