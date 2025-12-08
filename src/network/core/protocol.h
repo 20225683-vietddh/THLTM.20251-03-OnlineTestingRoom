@@ -62,6 +62,8 @@
 #define MSG_START_ROOM_TEST_RES  0x004B
 #define MSG_SUBMIT_ROOM_TEST_REQ 0x004C
 #define MSG_SUBMIT_ROOM_TEST_RES 0x004D
+#define MSG_AUTO_SAVE_REQ        0x004E
+#define MSG_AUTO_SAVE_RES        0x004F
 
 // Message Types - Control
 #define MSG_ERROR     0x00FF
