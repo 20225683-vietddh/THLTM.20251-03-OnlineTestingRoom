@@ -43,6 +43,39 @@ class RoomRepository:
             # If room_code collision, retry
             return self.create_test_room(room_name, teacher_id, num_questions, duration_minutes)
     
+    def get_room_by_id(self, room_id):
+        """Get room by ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT r.id, r.room_name, r.room_code, r.teacher_id, u.full_name,
+                   r.num_questions, r.duration_minutes, r.status, r.created_at,
+                   r.start_time, r.end_time
+            FROM test_rooms r
+            JOIN users u ON r.teacher_id = u.id
+            WHERE r.id = ?
+        ''', (room_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                'id': row[0],
+                'room_name': row[1],
+                'room_code': row[2],
+                'teacher_id': row[3],
+                'teacher_name': row[4],
+                'num_questions': row[5],
+                'duration_minutes': row[6],
+                'status': row[7],
+                'created_at': str(row[8]) if row[8] else None,
+                'start_time': str(row[9]) if row[9] else None,
+                'end_time': str(row[10]) if row[10] else None
+            }
+        return None
+    
     def get_room_by_code(self, room_code):
         """Get room by code"""
         conn = self.get_connection()

@@ -657,24 +657,30 @@ class StudentWindow:
                 return
         
         try:
-            # Save to local cache first
+            # Save to local cache first (always succeed)
             self._save_local_cache()
             
-            # Try save to server
+            answered = len([a for a in self.answers if a.get('selected', -1) != -1])
+            print(f"[CACHE] Saved {answered}/{len(self.answers)} answers to local cache")
+            
+            # Try save to server (may fail if server down)
             if self.callbacks.get('on_auto_save'):
-                self.callbacks['on_auto_save'](
-                    room_id=self.room_id,
-                    answers=self.answers,
-                    is_final=False
-                )
+                try:
+                    self.callbacks['on_auto_save'](
+                        room_id=self.room_id,
+                        answers=self.answers,
+                        is_final=False
+                    )
+                    print("[AUTO-SAVE] Server acknowledged")
+                except Exception as e:
+                    print(f"⚠️ Server auto-save failed (server down?): {e}")
+                    # Don't crash - local cache is still safe!
             
             self.last_save_time = datetime.now()
-            answered = len([a for a in self.answers if a.get('selected', -1) != -1])
-            print(f"[AUTO-SAVE] Saved {answered}/{len(self.answers)} answers at {self.last_save_time.strftime('%H:%M:%S')}")
             
         except Exception as e:
-            print(f"⚠️ Auto-save failed: {e}")
-            # Don't crash, just log
+            print(f"⚠️ Cache save failed: {e}")
+            # Don't crash auto-save loop
         
         # Schedule next save
         if self.auto_save_running:

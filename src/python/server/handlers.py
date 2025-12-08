@@ -393,12 +393,45 @@ class RequestHandlers:
                 self.send_error(client_socket, ERR_INTERNAL, "User not found")
                 return
             
-            # Get room to verify ownership
-            room = self.db.get_room_by_code('')  # Need to add get_room_by_id
-            # For now, just update status
+            # Get room info
+            room = self.db.get_room_by_id(room_id)
+            if not room:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Room not found")
+                return
+            
+            # Verify ownership
+            if room['teacher_id'] != user['id']:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Only room creator can start the test")
+                return
+            
+            # Check if room already started
+            if room['status'] != 'waiting':
+                self.send_error(client_socket, ERR_BAD_REQUEST, f"Room is already {room['status']}")
+                return
+            
+            # CRITICAL: Check if questions exist
+            questions = self.db.get_room_questions(room_id)
+            if not questions or len(questions) == 0:
+                self.send_error(
+                    client_socket, 
+                    ERR_BAD_REQUEST, 
+                    "Cannot start test: No questions added yet. Please add questions first."
+                )
+                return
+            
+            # Check if questions count matches room requirement
+            if len(questions) < room['num_questions']:
+                self.send_error(
+                    client_socket,
+                    ERR_BAD_REQUEST,
+                    f"Cannot start test: Need {room['num_questions']} questions, but only {len(questions)} added."
+                )
+                return
+            
+            # All checks passed - start room
             self.db.start_test_room(room_id)
             
-            self.log(f"[OK] Room {room_id} started by {session['username']}")
+            self.log(f"[OK] Room {room_id} ('{room['room_name']}') started by {session['username']} - {len(questions)} questions ready")
             
             # Send response
             self.send_response(client_socket, MSG_START_ROOM_RES, {
@@ -458,6 +491,22 @@ class RequestHandlers:
                 self.send_error(client_socket, ERR_BAD_REQUEST, "Missing room_id")
                 return
             
+            # Check if room exists and get num_questions limit
+            room = self.db.get_room_by_id(room_id)
+            if not room:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Room not found")
+                return
+            
+            # Check current question count
+            current_questions = self.db.get_room_questions(room_id)
+            if len(current_questions) >= room['num_questions']:
+                self.send_error(
+                    client_socket, 
+                    ERR_BAD_REQUEST, 
+                    f"Cannot add more questions. Room limit: {room['num_questions']}, Current: {len(current_questions)}"
+                )
+                return
+            
             if not question_text or len(question_text) < 5:
                 self.send_error(client_socket, ERR_BAD_REQUEST, "Question text too short (min 5 characters)")
                 return
@@ -481,7 +530,9 @@ class RequestHandlers:
                 correct_answer=correct_answer
             )
             
-            self.log(f"[OK] Question {question_id} added to room {room_id} by {session['username']}")
+            # Re-count after adding
+            updated_count = len(current_questions) + 1
+            self.log(f"[OK] Question {question_id} added to room {room_id} by {session['username']} ({updated_count}/{room['num_questions']})")
             
             # Send success response
             self.send_response(client_socket, MSG_ADD_QUESTION_RES, {

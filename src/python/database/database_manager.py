@@ -64,6 +64,10 @@ class DatabaseManager:
         """Create test room"""
         return self.rooms.create_test_room(room_name, teacher_id, num_questions, duration_minutes)
     
+    def get_room_by_id(self, room_id):
+        """Get room by ID"""
+        return self.rooms.get_room_by_id(room_id)
+    
     def get_room_by_code(self, room_code):
         """Get room by code"""
         return self.rooms.get_room_by_code(room_code)
