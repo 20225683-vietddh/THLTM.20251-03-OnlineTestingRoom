@@ -626,9 +626,27 @@ class StudentWindow:
             except:
                 pass
         
-        # Wait a moment to ensure auto-save is done
+        # Wait for any ongoing auto-save to complete
         import time
-        time.sleep(0.1)
+        max_wait = 3.0  # Max 3 seconds
+        waited = 0
+        check_interval = 0.1
+        
+        # Check if handler has auto_save_in_progress flag
+        handler = self.callbacks.get('_student_handler')
+        if handler:
+            while waited < max_wait:
+                if not handler.auto_save_in_progress:
+                    break
+                print(f"[SUBMIT] Waiting for auto-save... ({waited:.1f}s)")
+                time.sleep(check_interval)
+                waited += check_interval
+            
+            if handler.auto_save_in_progress:
+                print("⚠️ [SUBMIT] Auto-save still in progress after 3s, proceeding anyway")
+        else:
+            # Fallback: just wait a bit
+            time.sleep(0.5)
         
         # Now submit
         if self.callbacks.get('on_submit_test'):

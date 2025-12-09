@@ -523,21 +523,19 @@ class StudentHandler:
                 'is_final': is_final
             })
             
-            # Consume response quickly (with short timeout)
-            import socket
-            old_timeout = self.conn.socket.gettimeout()
+            # Try to consume response (non-blocking, best effort)
+            # Note: socket is an int (C file descriptor), not Python socket object
             try:
-                self.conn.socket.settimeout(1.0)  # 1s timeout
                 response = self.conn.receive_message()
                 
                 if response['message_type'] == MSG_AUTO_SAVE_RES:
                     print("[AUTO-SAVE] Server acknowledged")
                     return True
-            except socket.timeout:
-                print("⚠️ Auto-save timeout (non-critical)")
+            except Exception as e:
+                # Auto-save is non-critical, just log and continue
+                print(f"⚠️ Auto-save ACK error (non-critical): {e}")
                 return False
             finally:
-                self.conn.socket.settimeout(old_timeout)
                 self.auto_save_in_progress = False
             
             return False

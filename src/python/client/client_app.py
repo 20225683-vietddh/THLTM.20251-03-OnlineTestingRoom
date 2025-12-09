@@ -193,7 +193,8 @@ class TestClientApp(ctk.CTk):
                 'on_refresh_rooms': self.handle_refresh_student_rooms,
                 'on_refresh_available': self.handle_refresh_available_rooms,
                 'on_logout': self.handle_logout,
-                'on_auto_save': self.handle_auto_save
+                'on_auto_save': self.handle_auto_save,
+                '_student_handler': self.student_handler  # Pass handler for internal access
             })
             
             # Show room lobby
