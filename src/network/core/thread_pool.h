@@ -176,5 +176,88 @@ int server_context_init(server_context_t* ctx, socket_t server_socket,
  */
 void server_context_destroy(server_context_t* ctx);
 
-#endif // THREAD_POOL_H
+// ==================== BROADCAST MANAGER ====================
 
+#define MAX_BROADCAST_CLIENTS 100
+
+/**
+ * @brief Client info for broadcast
+ */
+typedef struct {
+    socket_t socket;        // Client socket
+    int room_id;           // Room ID (0 = not in any room)
+    char username[32];     // Username for identification
+    int active;            // 1 = active, 0 = disconnected
+} broadcast_client_t;
+
+/**
+ * @brief Broadcast manager for room-based messaging
+ * 
+ * Allows broadcasting messages to all clients in a specific room.
+ * Thread-safe with mutex protection.
+ */
+typedef struct {
+    broadcast_client_t clients[MAX_BROADCAST_CLIENTS];
+    int client_count;
+    mutex_t lock;
+} broadcast_manager_t;
+
+/**
+ * @brief Initialize broadcast manager
+ * 
+ * @param mgr Pointer to broadcast manager
+ * @return 0 on success, -1 on failure
+ */
+int broadcast_manager_init(broadcast_manager_t* mgr);
+
+/**
+ * @brief Register client for broadcast
+ * 
+ * @param mgr Broadcast manager
+ * @param socket Client socket
+ * @param room_id Room ID
+ * @param username Client username
+ * @return 0 on success, -1 on failure
+ */
+int broadcast_manager_register(broadcast_manager_t* mgr, socket_t socket, 
+                               int room_id, const char* username);
+
+/**
+ * @brief Unregister client from broadcast
+ * 
+ * @param mgr Broadcast manager
+ * @param socket Client socket
+ * @return 0 on success, -1 on failure
+ */
+int broadcast_manager_unregister(broadcast_manager_t* mgr, socket_t socket);
+
+/**
+ * @brief Update client's room
+ * 
+ * @param mgr Broadcast manager
+ * @param socket Client socket
+ * @param room_id New room ID
+ * @return 0 on success, -1 on failure
+ */
+int broadcast_manager_update_room(broadcast_manager_t* mgr, socket_t socket, int room_id);
+
+/**
+ * @brief Broadcast message to all clients in a room
+ * 
+ * @param mgr Broadcast manager
+ * @param room_id Target room ID
+ * @param msg_type Protocol message type
+ * @param payload Message payload (JSON string)
+ * @return Number of clients message was sent to
+ */
+int broadcast_to_room(broadcast_manager_t* mgr, int room_id, 
+                      uint16_t msg_type, const char* payload);
+
+/**
+ * @brief Cleanup broadcast manager
+ * 
+ * @param mgr Broadcast manager
+ */
+void broadcast_manager_destroy(broadcast_manager_t* mgr);
+
+#endif // THREAD_POOL_H

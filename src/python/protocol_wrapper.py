@@ -72,6 +72,9 @@ ERR_CONFLICT = 5000
 ERR_USERNAME_EXISTS = 5001
 ERR_INTERNAL = 6000
 
+# Determine socket type based on platform
+socket_type = ctypes.c_int64 if platform.system() == "Windows" else ctypes.c_int
+
 # Protocol Header Structure (matches C struct)
 class ProtocolHeader(ctypes.Structure):
     _fields_ = [
@@ -84,6 +87,45 @@ class ProtocolHeader(ctypes.Structure):
         ("session_token", ctypes.c_char * 32),
         ("reserved", ctypes.c_char * 12)
     ]
+
+# Client Context Structure (matches C struct)
+class ClientContext(ctypes.Structure):
+    _fields_ = [
+        ("client_socket", socket_type),
+        ("thread_id", ctypes.c_int),
+        ("user_data", ctypes.c_void_p)
+    ]
+
+# Server Context Structure (matches C struct)
+class ServerContext(ctypes.Structure):
+    _fields_ = [
+        ("server_socket", socket_type),
+        ("handler", ctypes.c_void_p),  # Function pointer
+        ("running", ctypes.c_int),
+        ("clients_mutex", ctypes.c_void_p),  # Opaque mutex
+        ("active_clients", ctypes.c_int),
+        ("user_data", ctypes.c_void_p)
+    ]
+
+# Broadcast Client Structure (matches C struct)
+class BroadcastClient(ctypes.Structure):
+    _fields_ = [
+        ("socket", socket_type),
+        ("room_id", ctypes.c_int),
+        ("username", ctypes.c_char * 32),
+        ("active", ctypes.c_int)
+    ]
+
+# Broadcast Manager Structure (matches C struct)
+class BroadcastManager(ctypes.Structure):
+    _fields_ = [
+        ("clients", BroadcastClient * 100),  # MAX_BROADCAST_CLIENTS
+        ("client_count", ctypes.c_int),
+        ("lock", ctypes.c_void_p)  # Opaque mutex
+    ]
+
+# Client handler function type
+ClientHandlerFunc = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.POINTER(ClientContext))
 
 class ProtocolWrapper:
     """Enhanced wrapper with protocol support"""
@@ -123,8 +165,6 @@ class ProtocolWrapper:
         
     def _define_protocol_functions(self):
         """Define C protocol function signatures"""
-        # Determine socket type (platform-specific)
-        socket_type = ctypes.c_int64 if platform.system() == "Windows" else ctypes.c_int
         
         # === Basic Socket Functions ===
         # py_init_network() -> int
@@ -178,6 +218,73 @@ class ProtocolWrapper:
         # py_get_unix_timestamp
         self.lib.py_get_unix_timestamp.argtypes = []
         self.lib.py_get_unix_timestamp.restype = ctypes.c_int64
+        
+        # === Threading Functions ===
+        # py_server_accept_loop
+        self.lib.py_server_accept_loop.argtypes = [ctypes.c_void_p]
+        self.lib.py_server_accept_loop.restype = ctypes.c_void_p
+        
+        # py_server_context_init
+        self.lib.py_server_context_init.argtypes = [
+            ctypes.POINTER(ServerContext),
+            socket_type,
+            ClientHandlerFunc,
+            ctypes.c_void_p
+        ]
+        self.lib.py_server_context_init.restype = ctypes.c_int
+        
+        # py_server_context_destroy
+        self.lib.py_server_context_destroy.argtypes = [ctypes.POINTER(ServerContext)]
+        self.lib.py_server_context_destroy.restype = None
+        
+        # py_thread_create_client_handler
+        self.lib.py_thread_create_client_handler.argtypes = [
+            ClientHandlerFunc,
+            ctypes.POINTER(ClientContext)
+        ]
+        self.lib.py_thread_create_client_handler.restype = ctypes.c_int
+        
+        # === Broadcast Functions ===
+        # py_broadcast_manager_init
+        self.lib.py_broadcast_manager_init.argtypes = [ctypes.POINTER(BroadcastManager)]
+        self.lib.py_broadcast_manager_init.restype = ctypes.c_int
+        
+        # py_broadcast_manager_register
+        self.lib.py_broadcast_manager_register.argtypes = [
+            ctypes.POINTER(BroadcastManager),
+            socket_type,
+            ctypes.c_int,
+            ctypes.c_char_p
+        ]
+        self.lib.py_broadcast_manager_register.restype = ctypes.c_int
+        
+        # py_broadcast_manager_unregister
+        self.lib.py_broadcast_manager_unregister.argtypes = [
+            ctypes.POINTER(BroadcastManager),
+            socket_type
+        ]
+        self.lib.py_broadcast_manager_unregister.restype = ctypes.c_int
+        
+        # py_broadcast_manager_update_room
+        self.lib.py_broadcast_manager_update_room.argtypes = [
+            ctypes.POINTER(BroadcastManager),
+            socket_type,
+            ctypes.c_int
+        ]
+        self.lib.py_broadcast_manager_update_room.restype = ctypes.c_int
+        
+        # py_broadcast_to_room
+        self.lib.py_broadcast_to_room.argtypes = [
+            ctypes.POINTER(BroadcastManager),
+            ctypes.c_int,
+            ctypes.c_uint16,
+            ctypes.c_char_p
+        ]
+        self.lib.py_broadcast_to_room.restype = ctypes.c_int
+        
+        # py_broadcast_manager_destroy
+        self.lib.py_broadcast_manager_destroy.argtypes = [ctypes.POINTER(BroadcastManager)]
+        self.lib.py_broadcast_manager_destroy.restype = None
     
     def send_message(self, socket, msg_type, payload_dict=None, use_session=True):
         """

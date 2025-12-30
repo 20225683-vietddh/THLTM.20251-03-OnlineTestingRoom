@@ -90,4 +90,93 @@ void py_generate_message_id(char* message_id);
  */
 int64_t py_get_unix_timestamp(void);
 
+// ==================== THREADING API (Python) ====================
+
+/**
+ * @brief Server accept loop (Python API)
+ * Runs in a thread to accept incoming connections
+ * @param context Server context pointer
+ * @return NULL
+ */
+void* py_server_accept_loop(void* context);
+
+/**
+ * @brief Initialize server context (Python API)
+ * @param ctx Server context
+ * @param server_socket Server socket descriptor
+ * @param handler Client handler function
+ * @param user_data User-defined data
+ * @return 0 on success, -1 on failure
+ */
+int py_server_context_init(server_context_t* ctx, socket_t server_socket,
+                           client_handler_func handler, void* user_data);
+
+/**
+ * @brief Destroy server context (Python API)
+ * @param ctx Server context
+ */
+void py_server_context_destroy(server_context_t* ctx);
+
+/**
+ * @brief Create client handler thread (Python API)
+ * @param handler Client handler function
+ * @param context Client context
+ * @return 0 on success, -1 on failure
+ */
+int py_thread_create_client_handler(client_handler_func handler, client_context_t* context);
+
+// ==================== BROADCAST API (Python) ====================
+
+/**
+ * @brief Initialize broadcast manager (Python API)
+ * @param mgr Broadcast manager
+ * @return 0 on success, -1 on failure
+ */
+int py_broadcast_manager_init(broadcast_manager_t* mgr);
+
+/**
+ * @brief Register client for broadcast (Python API)
+ * @param mgr Broadcast manager
+ * @param socket Client socket
+ * @param room_id Room ID
+ * @param username Client username
+ * @return 0 on success, -1 on failure
+ */
+int py_broadcast_manager_register(broadcast_manager_t* mgr, socket_t socket,
+                                  int room_id, const char* username);
+
+/**
+ * @brief Unregister client from broadcast (Python API)
+ * @param mgr Broadcast manager
+ * @param socket Client socket
+ * @return 0 on success, -1 on failure
+ */
+int py_broadcast_manager_unregister(broadcast_manager_t* mgr, socket_t socket);
+
+/**
+ * @brief Update client's room (Python API)
+ * @param mgr Broadcast manager
+ * @param socket Client socket
+ * @param room_id New room ID
+ * @return 0 on success, -1 on failure
+ */
+int py_broadcast_manager_update_room(broadcast_manager_t* mgr, socket_t socket, int room_id);
+
+/**
+ * @brief Broadcast message to room (Python API)
+ * @param mgr Broadcast manager
+ * @param room_id Target room ID
+ * @param msg_type Message type
+ * @param payload Message payload
+ * @return Number of clients message was sent to
+ */
+int py_broadcast_to_room(broadcast_manager_t* mgr, int room_id,
+                        uint16_t msg_type, const char* payload);
+
+/**
+ * @brief Destroy broadcast manager (Python API)
+ * @param mgr Broadcast manager
+ */
+void py_broadcast_manager_destroy(broadcast_manager_t* mgr);
+
 #endif // NETWORK_H

@@ -1,4 +1,5 @@
 #include "thread_pool.h"
+#include "protocol.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -183,5 +184,142 @@ void server_context_destroy(server_context_t* ctx) {
     if (ctx) {
         ctx->running = 0;
         mutex_destroy(&ctx->clients_mutex);
+    }
+}
+
+// ==================== BROADCAST MANAGER IMPLEMENTATION ====================
+
+int broadcast_manager_init(broadcast_manager_t* mgr) {
+    if (!mgr) {
+        return -1;
+    }
+    
+    // Initialize all clients as inactive
+    for (int i = 0; i < MAX_BROADCAST_CLIENTS; i++) {
+        mgr->clients[i].active = 0;
+        mgr->clients[i].socket = INVALID_SOCKET;
+        mgr->clients[i].room_id = 0;
+        mgr->clients[i].username[0] = '\0';
+    }
+    
+    mgr->client_count = 0;
+    
+    // Initialize mutex
+    return mutex_init(&mgr->lock);
+}
+
+int broadcast_manager_register(broadcast_manager_t* mgr, socket_t socket,
+                               int room_id, const char* username) {
+    if (!mgr) {
+        return -1;
+    }
+    
+    mutex_lock(&mgr->lock);
+    
+    // Find empty slot
+    int slot = -1;
+    for (int i = 0; i < MAX_BROADCAST_CLIENTS; i++) {
+        if (!mgr->clients[i].active) {
+            slot = i;
+            break;
+        }
+    }
+    
+    if (slot == -1) {
+        // No available slots
+        mutex_unlock(&mgr->lock);
+        return -1;
+    }
+    
+    // Register client
+    mgr->clients[slot].socket = socket;
+    mgr->clients[slot].room_id = room_id;
+    mgr->clients[slot].active = 1;
+    
+    if (username) {
+        strncpy(mgr->clients[slot].username, username, 31);
+        mgr->clients[slot].username[31] = '\0';
+    } else {
+        mgr->clients[slot].username[0] = '\0';
+    }
+    
+    mgr->client_count++;
+    
+    mutex_unlock(&mgr->lock);
+    return 0;
+}
+
+int broadcast_manager_unregister(broadcast_manager_t* mgr, socket_t socket) {
+    if (!mgr) {
+        return -1;
+    }
+    
+    mutex_lock(&mgr->lock);
+    
+    // Find and remove client
+    for (int i = 0; i < MAX_BROADCAST_CLIENTS; i++) {
+        if (mgr->clients[i].active && mgr->clients[i].socket == socket) {
+            mgr->clients[i].active = 0;
+            mgr->clients[i].socket = INVALID_SOCKET;
+            mgr->client_count--;
+            mutex_unlock(&mgr->lock);
+            return 0;
+        }
+    }
+    
+    mutex_unlock(&mgr->lock);
+    return -1;  // Client not found
+}
+
+int broadcast_manager_update_room(broadcast_manager_t* mgr, socket_t socket, int room_id) {
+    if (!mgr) {
+        return -1;
+    }
+    
+    mutex_lock(&mgr->lock);
+    
+    // Find and update client's room
+    for (int i = 0; i < MAX_BROADCAST_CLIENTS; i++) {
+        if (mgr->clients[i].active && mgr->clients[i].socket == socket) {
+            mgr->clients[i].room_id = room_id;
+            mutex_unlock(&mgr->lock);
+            return 0;
+        }
+    }
+    
+    mutex_unlock(&mgr->lock);
+    return -1;  // Client not found
+}
+
+int broadcast_to_room(broadcast_manager_t* mgr, int room_id,
+                      uint16_t msg_type, const char* payload) {
+    if (!mgr) {
+        return -1;
+    }
+    
+    int sent_count = 0;
+    
+    mutex_lock(&mgr->lock);
+    
+    // Send to all clients in the room
+    for (int i = 0; i < MAX_BROADCAST_CLIENTS; i++) {
+        if (mgr->clients[i].active && mgr->clients[i].room_id == room_id) {
+            // Send message (protocol_send_message is thread-safe per socket)
+            int result = protocol_send_message(mgr->clients[i].socket, 
+                                              msg_type, payload, NULL);
+            if (result > 0) {
+                sent_count++;
+            }
+        }
+    }
+    
+    mutex_unlock(&mgr->lock);
+    
+    return sent_count;
+}
+
+void broadcast_manager_destroy(broadcast_manager_t* mgr) {
+    if (mgr) {
+        mutex_destroy(&mgr->lock);
     }
 }
