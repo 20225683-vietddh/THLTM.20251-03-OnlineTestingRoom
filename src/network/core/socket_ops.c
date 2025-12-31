@@ -129,13 +129,21 @@ int socket_send_data(socket_t socket, const char* data, int length) {
     int total_sent = 0;
     int bytes_sent;
 
-    // TCP may not send all data in one call
-    // Loop until all data is sent
+    // Validate input
+    if (!data || length <= 0) {
+        return -1;
+    }
+
+    // Loop until all data is sent (TCP may send partial data)
     while (total_sent < length) {
         bytes_sent = send(socket, data + total_sent, length - total_sent, 0);
         
         if (bytes_sent == SOCKET_ERROR) {
-            return -1;  // Send error
+            return -1;  // Network error
+        }
+        
+        if (bytes_sent == 0) {
+            return -1;  // Connection closed by peer
         }
         
         total_sent += bytes_sent;
@@ -145,32 +153,31 @@ int socket_send_data(socket_t socket, const char* data, int length) {
 }
 
 int socket_receive_data(socket_t socket, char* buffer, int buffer_size) {
-    // Receive data from socket (BLOCKING)
-    // Network Programming Note:
-    // TCP is a byte stream - recv() may return partial data.
-    // We loop until ALL requested bytes are received.
     int total_received = 0;
     int bytes_received;
     
+    // Validate input
+    if (!buffer || buffer_size <= 0) {
+        return -1;
+    }
+    
+    // Loop until all requested bytes received (TCP stream may be fragmented)
     while (total_received < buffer_size) {
         bytes_received = recv(socket, buffer + total_received, 
                              buffer_size - total_received, 0);
         
         if (bytes_received == 0) {
-            // Connection closed gracefully
-            // Return bytes received so far (may be partial)
+            // Connection closed by peer - return partial data
             return total_received;
         }
         
         if (bytes_received == SOCKET_ERROR) {
-            // Error occurred
-            return -1;
+            return -1;  // Network error
         }
         
         total_received += bytes_received;
     }
     
-    // All requested bytes received
     return total_received;
 }
 

@@ -4,6 +4,7 @@ Provides the graphical interface for the test server
 """
 import customtkinter as ctk
 import threading
+import ctypes
 from datetime import datetime
 import sys
 import os
@@ -11,7 +12,10 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from protocol_wrapper import ProtocolWrapper
+from protocol_wrapper import (
+    ProtocolWrapper, ClientContext, ServerContext, 
+    ClientHandlerFunc, socket_type
+)
 from auth import AuthManager, SessionManager
 from database import Database
 from server.handlers import RequestHandlers
@@ -37,6 +41,8 @@ class TestServerGUI(ctk.CTk):
         self.server_socket = None
         self.server_running = False
         self.clients = {}
+        self.server_context = None
+        self.server_thread = None
         
         # Setup GUI FIRST (so append_log works)
         self.setup_gui()
@@ -60,6 +66,9 @@ class TestServerGUI(ctk.CTk):
                 'statistics': self.update_statistics
             }
         )
+        
+        # Set window close handler
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         # Start server automatically
         self.after(100, lambda: self.start_server(5555))
@@ -165,45 +174,75 @@ class TestServerGUI(ctk.CTk):
         self.update_students_list()
     
     def start_server(self, port=5555):
-        """Start the server"""
+        """Start the server using C accept loop"""
         if self.server_running:
             return
         
         try:
+            # Create server socket
             self.server_socket = self.proto.create_server(port)
             self.server_running = True
+            
+            # Create C callback for client handler
+            @ClientHandlerFunc
+            def c_client_handler(ctx_ptr):
+                """C callback wrapper for Python client handler"""
+                try:
+                    # Extract client socket from context
+                    ctx = ctx_ptr.contents
+                    client_socket = ctx.client_socket
+                    
+                    # Call Python handler
+                    self.client_handler.handle_client(client_socket)
+                    
+                except Exception as e:
+                    self.append_log(f"✗ Handler error: {str(e)}")
+                
+                return None
+            
+            # Keep reference to prevent garbage collection
+            self._c_handler_ref = c_client_handler
+            
+            # Initialize C server context
+            self.server_context = ServerContext()
+            result = self.proto.lib.py_server_context_init(
+                ctypes.byref(self.server_context),
+                self.server_socket,
+                c_client_handler,
+                None  # user_data
+            )
+            
+            if result != 0:
+                raise RuntimeError("Failed to initialize server context")
+            
+            # Start C accept loop in Python thread
+            # (C will spawn C threads for each client)
+            self.server_thread = threading.Thread(
+                target=self._run_c_accept_loop,
+                daemon=True
+            )
+            self.server_thread.start()
             
             self.status_label.configure(
                 text=f"🟢 Server Running on Port {port}",
                 text_color="green"
             )
             
-            # Start accept thread
-            threading.Thread(target=self.accept_clients, daemon=True).start()
-            
             self.append_log(f"[OK] Server started on port {port} (TAP Protocol v1.0)")
+            self.append_log(f"[OK] Using C accept loop with pthread per client")
             
         except Exception as e:
             self.append_log(f"✗ Failed to start server: {str(e)}")
             self.server_running = False
     
-    def accept_clients(self):
-        """Accept incoming client connections"""
-        while self.server_running:
-            try:
-                client_socket = self.proto.accept_client(self.server_socket)
-                self.append_log(f"[OK] New connection from client")
-                
-                # Handle client in new thread
-                threading.Thread(
-                    target=self.client_handler.handle_client,
-                    args=(client_socket,),
-                    daemon=True
-                ).start()
-                
-            except Exception as e:
-                if self.server_running:
-                    self.append_log(f"✗ Accept error: {str(e)}")
+    def _run_c_accept_loop(self):
+        """Run C accept loop (blocks until server stops)"""
+        try:
+            self.proto.lib.py_server_accept_loop(
+                ctypes.byref(self.server_context)
+            )
+        except Exception as e:
+            self.append_log(f"✗ Accept loop error: {str(e)}")
     
     def append_log(self, message):
         """Append message to log (thread-safe)"""
@@ -264,11 +303,25 @@ class TestServerGUI(ctk.CTk):
     def on_closing(self):
         """Handle window close"""
         self.server_running = False
+        
+        # Stop C server context
+        if self.server_context:
+            self.server_context.running = 0
+            try:
+                self.proto.lib.py_server_context_destroy(
+                    ctypes.byref(self.server_context)
+                )
+            except:
+                pass
+        
+        # Close server socket
         if self.server_socket:
             try:
                 self.proto.close_socket(self.server_socket)
             except:
                 pass
+        
+        # Cleanup network
         self.proto.cleanup_network()
         self.destroy()
 

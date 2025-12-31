@@ -44,14 +44,25 @@ class RequestHandlers:
         self.questions = []
         self.test_duration = 30
     
-    def load_questions(self, questions_file='src/python/questions.json'):
-        """Load questions from JSON file"""
+    def load_questions(self):
+        """Check database questions availability"""
         try:
-            with open(questions_file, 'r', encoding='utf-8') as f:
-                self.questions = json.load(f)
-            self.log(f"[OK] Loaded {len(self.questions)} questions")
+            # Query all rooms to count total questions
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM room_questions")
+            count = cursor.fetchone()[0]
+            conn.close()
+            
+            if count > 0:
+                self.log(f"[OK] Database has {count} questions available")
+            else:
+                self.log(f"[OK] Database ready (no questions yet - use teacher panel to add)")
+            
+            self.questions = []  # Questions loaded per-room
+            
         except Exception as e:
-            self.log(f"✗ Failed to load questions: {str(e)}")
+            self.log(f"✗ Failed to check database: {str(e)}")
             self.questions = []
     
     def send_response(self, client_socket, msg_type, payload):

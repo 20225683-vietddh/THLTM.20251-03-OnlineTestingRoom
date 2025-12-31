@@ -7,70 +7,40 @@ import json
 import platform
 import struct
 import os
+import re
 from pathlib import Path
 
-# Protocol constants
-PROTOCOL_MAGIC = 0x54415031  # "TAP1"
-PROTOCOL_VERSION = 0x0100    # v1.0
+# ==================== AUTO-LOAD CONSTANTS FROM C HEADER ====================
 
-# Message Types
-MSG_REGISTER_REQ = 0x0001
-MSG_REGISTER_RES = 0x0002
-MSG_LOGIN_REQ = 0x0003
-MSG_LOGIN_RES = 0x0004
-MSG_LOGOUT_REQ = 0x0005
-MSG_LOGOUT_RES = 0x0006
-MSG_TEST_CONFIG = 0x0010
-MSG_TEST_START_REQ = 0x0011
-MSG_TEST_START_RES = 0x0012
-MSG_TEST_QUESTIONS = 0x0013
-MSG_TEST_SUBMIT = 0x0014
-MSG_TEST_RESULT = 0x0015
-MSG_TEACHER_DATA_REQ = 0x0020
-MSG_TEACHER_DATA_RES = 0x0021
-# Test Room Management
-MSG_CREATE_ROOM_REQ = 0x0030
-MSG_CREATE_ROOM_RES = 0x0031
-MSG_JOIN_ROOM_REQ = 0x0032
-MSG_JOIN_ROOM_RES = 0x0033
-MSG_START_ROOM_REQ = 0x0034
-MSG_START_ROOM_RES = 0x0035
-MSG_END_ROOM_REQ = 0x0036
-MSG_END_ROOM_RES = 0x0037
-MSG_GET_ROOMS_REQ = 0x0038
-MSG_GET_ROOMS_RES = 0x0039
-MSG_ADD_QUESTION_REQ = 0x0040
-MSG_ADD_QUESTION_RES = 0x0041
-MSG_GET_QUESTIONS_REQ = 0x0042
-MSG_GET_QUESTIONS_RES = 0x0043
-MSG_DELETE_QUESTION_REQ = 0x0044
-MSG_DELETE_QUESTION_RES = 0x0045
-MSG_GET_STUDENT_ROOMS_REQ = 0x0046
-MSG_GET_STUDENT_ROOMS_RES = 0x0047
-MSG_GET_AVAILABLE_ROOMS_REQ = 0x0048
-MSG_GET_AVAILABLE_ROOMS_RES = 0x0049
-MSG_START_ROOM_TEST_REQ = 0x004A
-MSG_START_ROOM_TEST_RES = 0x004B
-MSG_SUBMIT_ROOM_TEST_REQ = 0x004C
-MSG_SUBMIT_ROOM_TEST_RES = 0x004D
-MSG_AUTO_SAVE_REQ = 0x004E
-MSG_AUTO_SAVE_RES = 0x004F
-MSG_ROOM_STATUS = 0x003A
-MSG_ERROR = 0x00FF
-MSG_HEARTBEAT = 0x00FE
+def _load_protocol_constants():
+    """
+    Parse protocol.h and load all constants at import time.
+    Source of truth: src/network/core/protocol.h
+    """
+    # Locate protocol.h
+    current_file = Path(__file__)
+    protocol_header = current_file.parent.parent.parent / "src" / "network" / "core" / "protocol.h"
+    
+    if not protocol_header.exists():
+        raise FileNotFoundError(f"protocol.h not found at {protocol_header}")
+    
+    constants = {}
+    header_content = protocol_header.read_text(encoding='utf-8')
+    
+    # Pattern: #define CONSTANT_NAME 0x1234 or #define CONSTANT_NAME 1234
+    pattern = re.compile(r'^\s*#define\s+((?:MSG_|ERR_|PROTOCOL_|MAX_)\w+)\s+(0x[0-9A-Fa-f]+|\d+)', re.MULTILINE)
+    
+    for match in pattern.finditer(header_content):
+        name = match.group(1)
+        value_str = match.group(2)
+        # Convert hex or decimal to int
+        value = int(value_str, 0)
+        constants[name] = value
+    
+    return constants
 
-# Error Codes
-ERR_SUCCESS = 1000
-ERR_BAD_REQUEST = 2000
-ERR_INVALID_JSON = 2001
-ERR_UNAUTHORIZED = 3000
-ERR_INVALID_CREDS = 3001
-ERR_SESSION_EXPIRED = 3002
-ERR_FORBIDDEN = 4000
-ERR_WRONG_ROLE = 4001
-ERR_CONFLICT = 5000
-ERR_USERNAME_EXISTS = 5001
-ERR_INTERNAL = 6000
+# Load all constants into module globals
+globals().update(_load_protocol_constants())
 
 # Determine socket type based on platform
 socket_type = ctypes.c_int64 if platform.system() == "Windows" else ctypes.c_int
