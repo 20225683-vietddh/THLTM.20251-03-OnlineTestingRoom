@@ -96,34 +96,19 @@ typedef struct {
 } protocol_header_t;             // Total: 88 bytes with padding
 
 /**
- * @brief Initialize protocol header with given parameters
- * @param header Pointer to header structure to initialize
+ * @brief Initialize protocol header
+ * @param header Pointer to header structure
  * @param msg_type Message type code
  * @param length Payload length in bytes
- * @param session_token Session token string (NULL if not authenticated)
- * 
- * Network Programming Note:
- * Converts multi-byte fields to Network Byte Order (Big-Endian)
- * using htons() and htonl() functions.
+ * @param session_token Session token (NULL if not authenticated)
  */
 void protocol_init_header(protocol_header_t* header, uint16_t msg_type,
                           uint32_t length, const char* session_token);
 
 /**
- * @brief Validate received protocol header
- * @param header Pointer to header structure to validate
- * @return 0 on success, negative error code on failure
- * 
- * Validation checks:
- * - Magic number matches PROTOCOL_MAGIC
- * - Version is supported
- * - Payload length is within limits
- * 
- * Return codes:
- * 0: Valid
- * -1: Invalid magic number
- * -2: Version mismatch
- * -3: Payload too large
+ * @brief Validate protocol header
+ * @param header Pointer to header structure
+ * @return 0 on success, -1 invalid magic, -2 version mismatch, -3 payload too large
  */
 int protocol_validate_header(protocol_header_t* header);
 
@@ -131,19 +116,9 @@ int protocol_validate_header(protocol_header_t* header);
  * @brief Send protocol message (header + payload)
  * @param socket Socket descriptor
  * @param msg_type Message type code
- * @param payload Payload data (can be NULL)
- * @param session_token Session token (can be NULL)
- * @return Bytes sent on success, negative on error
- * 
- * Network Programming Flow:
- * 1. Build header with metadata
- * 2. Send header (fixed size: sizeof(protocol_header_t))
- * 3. Send payload (variable length if exists)
- * 
- * Return codes:
- * > 0: Success (total bytes sent)
- * -1: Header send failed
- * -2: Payload send failed
+ * @param payload Payload data (NULL if none)
+ * @param session_token Session token (NULL if not authenticated)
+ * @return Bytes sent on success, -1 header failed, -2 payload failed
  */
 int protocol_send_message(socket_t socket, uint16_t msg_type, 
                           const char* payload, const char* session_token);
@@ -151,23 +126,10 @@ int protocol_send_message(socket_t socket, uint16_t msg_type,
 /**
  * @brief Receive protocol message (header + payload)
  * @param socket Socket descriptor
- * @param header Pointer to header structure to fill
+ * @param header Pointer to header structure
  * @param payload Buffer to store payload
- * @param max_payload_size Maximum payload buffer size
- * @return Payload length on success, negative on error
- * 
- * Network Programming Flow:
- * 1. Receive header (fixed size: sizeof(protocol_header_t))
- * 2. Validate header
- * 3. Receive payload (if length > 0)
- * 
- * Return codes:
- * >= 0: Success (payload length)
- * -1: Header receive failed
- * -2: Invalid magic number
- * -3: Version mismatch
- * -4: Payload too large
- * -5: Payload receive failed
+ * @param max_payload_size Maximum payload size
+ * @return Payload length on success, -1 recv failed, -2 invalid magic, -3 version mismatch, -4 too large, -5 payload failed
  */
 int protocol_receive_message(socket_t socket, protocol_header_t* header,
                              char* payload, int max_payload_size);

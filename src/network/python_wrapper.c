@@ -1,6 +1,4 @@
-#include "network.h"
-
-// ==================== PYTHON API IMPLEMENTATION ====================
+#include "python_wrapper.h"
 
 int py_init_network(void) {
     return socket_init_network();
@@ -66,20 +64,20 @@ int py_thread_create_client_handler(client_handler_func handler, client_context_
 // ==================== BROADCAST API ====================
 
 int py_broadcast_manager_init(broadcast_manager_t* mgr) {
-    return broadcast_manager_init(mgr);
+    return broadcast_init(mgr);
 }
 
 int py_broadcast_manager_register(broadcast_manager_t* mgr, socket_t socket,
                                   int room_id, const char* username) {
-    return broadcast_manager_register(mgr, socket, room_id, username);
+    return broadcast_register(mgr, socket, room_id);
 }
 
 int py_broadcast_manager_unregister(broadcast_manager_t* mgr, socket_t socket) {
-    return broadcast_manager_unregister(mgr, socket);
+    return broadcast_unregister(mgr, socket);
 }
 
 int py_broadcast_manager_update_room(broadcast_manager_t* mgr, socket_t socket, int room_id) {
-    return broadcast_manager_update_room(mgr, socket, room_id);
+    return broadcast_update_room(mgr, socket, room_id);
 }
 
 int py_broadcast_to_room(broadcast_manager_t* mgr, int room_id,
@@ -88,5 +86,5 @@ int py_broadcast_to_room(broadcast_manager_t* mgr, int room_id,
 }
 
 void py_broadcast_manager_destroy(broadcast_manager_t* mgr) {
-    broadcast_manager_destroy(mgr);
+    broadcast_destroy(mgr);
 }

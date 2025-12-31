@@ -20,7 +20,6 @@ def main():
     """Start the server application"""
     print("Starting Test Server...")
     app = TestServerGUI()
-    app.protocol("WM_DELETE_WINDOW", app.on_closing)
     app.mainloop()
 
 
