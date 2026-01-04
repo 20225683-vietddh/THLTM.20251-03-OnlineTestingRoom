@@ -207,4 +207,3 @@ const char* socket_get_error(void) {
     return strerror(errno);
 #endif
 }
-

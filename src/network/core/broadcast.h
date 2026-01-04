@@ -12,7 +12,7 @@
  * @brief Client information for broadcast management
  */
 typedef struct {
-    socket_t socket;        // Client socket descriptor
+    socket_t socket;       // Client socket descriptor
     int room_id;           // Room ID (0 = lobby, no room)
     int active;            // 1 = active, 0 = disconnected
 } broadcast_client_t;
@@ -80,4 +80,3 @@ int broadcast_to_room(broadcast_manager_t* mgr, int room_id,
 void broadcast_destroy(broadcast_manager_t* mgr);
 
 #endif // BROADCAST_H
-

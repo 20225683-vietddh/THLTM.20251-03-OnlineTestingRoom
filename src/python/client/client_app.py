@@ -194,6 +194,7 @@ class TestClientApp(ctk.CTk):
                 'on_refresh_available': self.handle_refresh_available_rooms,
                 'on_logout': self.handle_logout,
                 'on_auto_save': self.handle_auto_save,
+                'on_back_to_lobby': lambda: self.show_student_test(self.student_full_name),
                 '_student_handler': self.student_handler  # Pass handler for internal access
             })
             

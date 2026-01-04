@@ -769,6 +769,11 @@ class RequestHandlers:
                 self.send_error(client_socket, ERR_BAD_REQUEST, "You haven't joined this room")
                 return
             
+            # Check if student already completed this test
+            if room_found.get('participant_status') == 'submitted':
+                self.send_error(client_socket, ERR_BAD_REQUEST, "You have already completed this test")
+                return
+            
             # Verify room is active
             if room_found['room_status'] != 'active':
                 self.send_error(client_socket, ERR_BAD_REQUEST, f"Room is not active (status: {room_found['room_status']})")

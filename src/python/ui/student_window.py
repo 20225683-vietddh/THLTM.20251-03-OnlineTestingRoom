@@ -264,7 +264,18 @@ class StudentWindow:
             ).pack(anchor="w")
             
             # Action button based on status
-            if room['room_status'] == 'waiting':
+            participant_status = room.get('participant_status', 'joined')
+            
+            if participant_status == 'submitted':
+                # Student already completed this test
+                ctk.CTkLabel(
+                    room_card,
+                    text="✅\nCompleted",
+                    text_color="green",
+                    font=("Arial", 11, "bold"),
+                    width=80
+                ).pack(side="right", padx=10, pady=10)
+            elif room['room_status'] == 'waiting':
                 ctk.CTkLabel(
                     room_card,
                     text="Waiting\nfor teacher",
@@ -284,15 +295,12 @@ class StudentWindow:
                     font=("Arial", 12, "bold")
                 ).pack(side="right", padx=10, pady=10)
             else:  # ended
-                ctk.CTkButton(
+                ctk.CTkLabel(
                     room_card,
-                    text="View\nResults",
-                    command=lambda r=room: self._handle_view_results(r['id']),
-                    width=80,
-                    height=60,
-                    fg_color="blue",
-                    hover_color="darkblue",
-                    font=("Arial", 11, "bold")
+                    text="Test\nEnded",
+                    text_color="gray",
+                    font=("Arial", 11),
+                    width=80
                 ).pack(side="right", padx=10, pady=10)
     
     def update_available_rooms(self, rooms):
@@ -336,6 +344,11 @@ class StudentWindow:
         """Handle logout button"""
         if self.callbacks.get('on_logout'):
             self.callbacks['on_logout']()
+    
+    def _handle_back_to_lobby(self):
+        """Handle back to lobby after test completion"""
+        if self.callbacks.get('on_back_to_lobby'):
+            self.callbacks['on_back_to_lobby']()
        
     def show_ready_screen(self, full_name, num_questions, duration):
         """Show ready screen before test starts"""
@@ -816,8 +829,11 @@ class StudentWindow:
         
         ctk.CTkButton(
             result_frame,
-            text="Close",
-            command=self.parent.quit,
-            height=40
+            text="← Back to Lobby",
+            command=self._handle_back_to_lobby,
+            height=40,
+            font=("Arial", 14, "bold"),
+            fg_color="blue",
+            hover_color="darkblue"
         ).pack(pady=20)
 
