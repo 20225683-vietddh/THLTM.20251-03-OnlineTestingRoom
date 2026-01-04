@@ -124,7 +124,14 @@ class ClientHandler:
                     break
                     
         except Exception as e:
-            self.log(f"[Student {session['username']}] Connection ended: {str(e)}")
+            # Graceful disconnect vs error
+            error_msg = str(e)
+            if "Header receive failed" in error_msg or "Connection" in error_msg:
+                # Normal disconnect - use info icon
+                self.log(f"[OK] {session['username']} disconnected")
+            else:
+                # Actual error
+                self.log(f"✗ [Student {session['username']}] Error: {error_msg}")
     
     def _handle_teacher_requests(self, client_socket, session):
         """Handle ongoing teacher requests (room management)"""
@@ -161,5 +168,11 @@ class ClientHandler:
                     break
                     
         except Exception as e:
-            self.log(f"[Teacher {session['username']}] Connection ended: {str(e)}")
-
+            # Graceful disconnect vs error
+            error_msg = str(e)
+            if "Header receive failed" in error_msg or "Connection" in error_msg:
+                # Normal disconnect - use info icon
+                self.log(f"[OK] {session['username']} disconnected")
+            else:
+                # Actual error
+                self.log(f"✗ [Teacher {session['username']}] Error: {error_msg}")

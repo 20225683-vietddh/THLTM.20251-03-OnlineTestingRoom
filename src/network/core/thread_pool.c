@@ -177,7 +177,17 @@ int server_context_init(server_context_t* ctx, socket_t server_socket,
 
 void server_context_destroy(server_context_t* ctx) {
     if (ctx) {
+        // Step 1: Signal accept loop to stop
         ctx->running = 0;
+        
+        // Step 2: Close server socket to unblock accept()
+        // This causes accept() to fail immediately, allowing graceful shutdown
+        if (ctx->server_socket != INVALID_SOCKET) {
+            socket_close(ctx->server_socket);
+            ctx->server_socket = INVALID_SOCKET;
+        }
+        
+        // Step 3: Cleanup mutex
         mutex_destroy(&ctx->clients_mutex);
     }
 }
