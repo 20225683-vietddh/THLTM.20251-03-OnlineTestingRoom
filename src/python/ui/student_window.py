@@ -400,11 +400,12 @@ class StudentWindow:
             hover_color="darkgreen"
         ).pack(pady=20)
     
-    def show_test_screen(self, questions, duration, room_id=None, cached_data=None):
+    def show_test_screen(self, questions, duration, room_id=None, cached_data=None, server_timestamp=None):
         """Show test screen with questions"""
         self.questions = questions
         self.test_duration = duration
         self.room_id = room_id
+        self.server_timestamp = server_timestamp  # Store server timestamp
         
         # Check if resuming from cache
         if cached_data:
@@ -432,22 +433,49 @@ class StudentWindow:
             cached_timestamp = cached_data.get('timestamp')
             if cached_timestamp:
                 cached_time = datetime.fromisoformat(cached_timestamp)
-                # Calculate how much time has passed since cache
-                elapsed_from_cache = datetime.now() - cached_time
-                # Adjust start time
-                self.start_time = datetime.now() - elapsed_from_cache
+                cached_unix = cached_time.timestamp()  # Convert to UNIX
+                
+                # Calculate elapsed time using synced time
+                import time
+                if server_timestamp:
+                    # Use server time
+                    current_unix = server_timestamp
+                    self.time_offset = server_timestamp - time.time()
+                else:
+                    # Fallback to local time
+                    current_unix = time.time()
+                    self.time_offset = 0
+                
+                elapsed_from_cache = current_unix - cached_unix
+                self.start_time = current_unix - elapsed_from_cache
+                
+                answered_count = len([a for a in self.answers if a.get('selected', -1) != -1])
+                print(f"[RESUME] Restored {answered_count}/{len(questions)} answers")
+                print(f"[RESUME] Current question: {self.current_question + 1}")
+                print(f"[RESUME] Elapsed time: {elapsed_from_cache:.1f}s")
             else:
-                self.start_time = datetime.now()
-            
-            answered_count = len([a for a in self.answers if a.get('selected', -1) != -1])
-            print(f"[RESUME] Restored {answered_count}/{len(questions)} answers")
-            print(f"[RESUME] Current question: {self.current_question + 1}")
-            print(f"[RESUME] Elapsed time: {elapsed_from_cache if cached_timestamp else 'N/A'}")
+                # Fresh start with server time
+                import time
+                if server_timestamp:
+                    self.start_time = server_timestamp
+                    self.time_offset = server_timestamp - time.time()
+                else:
+                    self.start_time = time.time()
+                    self.time_offset = 0
         else:
             # Fresh start
             self.answers = [{"question_id": q["id"], "selected": -1} for q in questions]
             self.current_question = 0
-            self.start_time = datetime.now()
+            
+            # Initialize with server timestamp (synced time)
+            import time
+            if server_timestamp:
+                self.start_time = server_timestamp  # Use server's time
+                self.time_offset = server_timestamp - time.time()  # Calculate offset
+            else:
+                # Fallback to local time if server timestamp not available
+                self.start_time = time.time()
+                self.time_offset = 0
         
         self.timer_running = True
         self.auto_save_running = True
@@ -591,21 +619,26 @@ class StudentWindow:
             self.display_question()
     
     def _update_timer(self):
-        """Update timer display (recursive with after)"""
+        """Update timer display (recursive with after) - Uses server-synced time"""
         if not self.timer_running:
             return
         
-        elapsed = datetime.now() - self.start_time
-        remaining = timedelta(minutes=self.test_duration) - elapsed
+        # Get current time synced with server
+        import time
+        current_unix = time.time() + getattr(self, 'time_offset', 0)
         
-        if remaining.total_seconds() <= 0:
+        # Calculate elapsed and remaining time
+        elapsed_seconds = current_unix - self.start_time
+        remaining_seconds = (self.test_duration * 60) - elapsed_seconds
+        
+        if remaining_seconds <= 0:
             self.timer_running = False
             self.timer_label.configure(text="Time's Up!", text_color="red")
             self._handle_submit()
             return
         
-        minutes = int(remaining.total_seconds() // 60)
-        seconds = int(remaining.total_seconds() % 60)
+        minutes = int(remaining_seconds // 60)
+        seconds = int(remaining_seconds % 60)
         
         color = "green" if minutes >= 5 else "orange" if minutes >= 2 else "red"
         self.timer_label.configure(
@@ -681,9 +714,11 @@ class StudentWindow:
         
         # Don't auto-save in last 10 seconds (to avoid conflict with submit)
         if self.start_time:
-            elapsed = datetime.now() - self.start_time
-            remaining = timedelta(minutes=self.test_duration) - elapsed
-            if remaining.total_seconds() < 10:
+            import time
+            current_unix = time.time() + getattr(self, 'time_offset', 0)
+            elapsed_seconds = current_unix - self.start_time
+            remaining_seconds = (self.test_duration * 60) - elapsed_seconds
+            if remaining_seconds < 10:
                 print("[AUTO-SAVE] Skipped (less than 10s remaining, avoiding submit conflict)")
                 return
         
@@ -707,7 +742,8 @@ class StudentWindow:
                     print(f"⚠️ Server auto-save failed (server down?): {e}")
                     # Don't crash - local cache is still safe!
             
-            self.last_save_time = datetime.now()
+            import time
+            self.last_save_time = time.time()
             
         except Exception as e:
             print(f"⚠️ Cache save failed: {e}")
@@ -728,10 +764,11 @@ class StudentWindow:
         import json
         import os
         
+        import time
         cache_data = {
             'room_id': self.room_id,
             'answers': self.answers,
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': datetime.fromtimestamp(time.time()).isoformat(),
             'questions_count': len(self.questions),
             'current_question': self.current_question
         }

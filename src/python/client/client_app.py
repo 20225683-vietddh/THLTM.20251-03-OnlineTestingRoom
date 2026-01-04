@@ -180,7 +180,7 @@ class TestClientApp(ctk.CTk):
             # Create handler first
             self.student_handler = StudentHandler(self.conn, {
                 'show_ready': lambda fn, nq, d: self.student_window.show_ready_screen(fn, nq, d),
-                'show_test': lambda q, d, r=None, c=None: self.student_window.show_test_screen(q, d, r, c),
+                'show_test': lambda q, d, r=None, c=None, server_timestamp=None: self.student_window.show_test_screen(q, d, r, c, server_timestamp=server_timestamp),
                 'show_result': lambda r: self.student_window.show_result_screen(r, full_name)
             })
             

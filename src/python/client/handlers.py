@@ -378,10 +378,12 @@ class StudentHandler:
                     questions = data.get('questions', [])
                     duration = data.get('duration_minutes', 30)
                     room_name = data.get('room_name', 'Test Room')
+                    server_timestamp = data.get('server_timestamp')  # Unix timestamp from C server
                     
                     # Show test screen via UI callback (with cached data if resuming)
                     self.questions = questions
-                    self.ui['show_test'](questions, duration, room_id, cached_data)
+                    self.ui['show_test'](questions, duration, room_id, cached_data, 
+                                        server_timestamp=server_timestamp)
                     
                     return {
                         'success': True,

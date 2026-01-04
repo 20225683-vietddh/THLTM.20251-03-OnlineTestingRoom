@@ -840,6 +840,9 @@ class RequestHandlers:
             # Update participant status to 'testing'
             self.db.update_participant_status(room_id, user['id'], 'testing')
             
+            # Get server timestamp from C (for time synchronization)
+            server_timestamp = self.proto.lib.py_get_unix_timestamp()
+            
             # Send questions
             self.send_response(client_socket, MSG_START_ROOM_TEST_RES, {
                 'code': ERR_SUCCESS,
@@ -848,7 +851,9 @@ class RequestHandlers:
                     'room_id': room_id,
                     'room_name': room_found['room_name'],
                     'questions': formatted_questions,
-                    'duration_minutes': room_found['duration_minutes']
+                    'duration_minutes': room_found['duration_minutes'],
+                    'server_timestamp': server_timestamp,  # Unix timestamp from C
+                    'start_time': room_found.get('start_time')  # ISO string for reference
                 }
             })
             
@@ -871,6 +876,14 @@ class RequestHandlers:
             user = self.db.get_user_by_username(session['username'])
             if not user:
                 self.send_error(client_socket, ERR_INTERNAL, "User not found")
+                return
+            
+            # SERVER-SIDE TIME VALIDATION (Anti-cheat: prevent late submissions)
+            # Check if room has ended (teacher ended the test)
+            room = self.db.get_room_by_id(room_id)
+            if room and room.get('status') == 'ended':
+                self.send_error(client_socket, ERR_BAD_REQUEST, 
+                               "Test has been ended by teacher. No more submissions accepted.")
                 return
             
             # Get questions with correct answers
