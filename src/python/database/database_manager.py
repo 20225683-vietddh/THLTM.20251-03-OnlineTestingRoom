@@ -81,7 +81,12 @@ class DatabaseManager:
         return self.rooms.start_test_room(room_id)
     
     def end_test_room(self, room_id):
-        """End test in room"""
+        """
+        End test in room
+        
+        Returns:
+            dict: {'success': bool, 'message': str, 'error': str (optional)}
+        """
         return self.rooms.end_test_room(room_id)
     
     def join_room(self, room_code, student_id):
@@ -125,6 +130,10 @@ class DatabaseManager:
     def get_room_question_count(self, room_id):
         """Get question count for room"""
         return self.rooms.get_room_question_count(room_id)
+    
+    def get_question_by_id(self, question_id):
+        """Get a question by ID"""
+        return self.rooms.get_question_by_id(question_id)
     
     # ==================== STATISTICS (Delegate to StatsRepository) ====================
     

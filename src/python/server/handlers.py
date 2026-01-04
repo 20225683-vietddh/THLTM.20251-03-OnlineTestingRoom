@@ -470,15 +470,19 @@ class RequestHandlers:
                 self.send_error(client_socket, ERR_INTERNAL, "User not found")
                 return
             
-            # End room
-            self.db.end_test_room(room_id)
+            # End room (with time validation)
+            result = self.db.end_test_room(room_id)
+            
+            if not result['success']:
+                self.send_error(client_socket, ERR_BAD_REQUEST, result.get('error', 'Cannot end room'))
+                return
             
             self.log(f"[OK] Room {room_id} ended by {session['username']}")
             
             # Send response
             self.send_response(client_socket, MSG_END_ROOM_RES, {
                 'code': ERR_SUCCESS,
-                'message': 'Room ended successfully'
+                'message': result.get('message', 'Room ended successfully')
             })
             
         except Exception as e:
@@ -506,6 +510,15 @@ class RequestHandlers:
             room = self.db.get_room_by_id(room_id)
             if not room:
                 self.send_error(client_socket, ERR_BAD_REQUEST, "Room not found")
+                return
+            
+            # Check room status - only allow adding questions to 'waiting' rooms
+            if room['status'] != 'waiting':
+                self.send_error(
+                    client_socket,
+                    ERR_BAD_REQUEST,
+                    f"Cannot add questions to room with status '{room['status']}'. Only 'waiting' rooms can be edited."
+                )
                 return
             
             # Check current question count
@@ -596,10 +609,32 @@ class RequestHandlers:
                 self.send_error(client_socket, ERR_BAD_REQUEST, "Missing question_id")
                 return
             
+            # Get question to check room status
+            question = self.db.get_question_by_id(question_id)
+            if not question:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Question not found")
+                return
+            
+            room_id = question['room_id']
+            room = self.db.get_room_by_id(room_id)
+            
+            if not room:
+                self.send_error(client_socket, ERR_BAD_REQUEST, "Room not found")
+                return
+            
+            # Only allow deleting from 'waiting' rooms
+            if room['status'] != 'waiting':
+                self.send_error(
+                    client_socket,
+                    ERR_BAD_REQUEST,
+                    f"Cannot delete questions from room with status '{room['status']}'. Only 'waiting' rooms can be edited."
+                )
+                return
+            
             # Delete question
             self.db.delete_room_question(question_id)
             
-            self.log(f"[OK] Question {question_id} deleted by {session['username']}")
+            self.log(f"[OK] Question {question_id} deleted from room {room_id} by {session['username']}")
             
             # Send response
             self.send_response(client_socket, MSG_DELETE_QUESTION_RES, {

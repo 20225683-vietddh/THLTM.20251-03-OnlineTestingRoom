@@ -162,21 +162,64 @@ class RoomRepository:
         return success
     
     def end_test_room(self, room_id):
-        """End test in room"""
+        """
+        End test in room
+        
+        Returns:
+            dict: {'success': bool, 'message': str, 'error': str (optional)}
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
         
+        # Get room info to validate timing
+        cursor.execute('''
+            SELECT status, start_time, duration_minutes
+            FROM test_rooms
+            WHERE id = ?
+        ''', (room_id,))
+        
+        room = cursor.fetchone()
+        
+        if not room:
+            conn.close()
+            return {'success': False, 'error': 'Room not found'}
+        
+        status, start_time_str, duration_minutes = room
+        
+        if status != 'active':
+            conn.close()
+            return {'success': False, 'error': f'Room is not active (status: {status})'}
+        
+        # Validate timing
+        if not start_time_str:
+            conn.close()
+            return {'success': False, 'error': 'Room has no start time'}
+        
+        from datetime import timedelta
+        start_time = datetime.fromisoformat(start_time_str)
+        min_end_time = start_time + timedelta(minutes=duration_minutes)
+        now = datetime.now()
+        
+        if now < min_end_time:
+            remaining = min_end_time - now
+            remaining_minutes = int(remaining.total_seconds() / 60)
+            conn.close()
+            return {
+                'success': False,
+                'error': f'Cannot end test yet. Students need {remaining_minutes} more minutes to finish.'
+            }
+        
+        # All checks passed, end the room
         cursor.execute('''
             UPDATE test_rooms
             SET status = 'ended', end_time = ?
-            WHERE id = ? AND status = 'active'
-        ''', (datetime.now().isoformat(), room_id))
+            WHERE id = ?
+        ''', (now.isoformat(), room_id))
         
-        success = cursor.rowcount > 0
         conn.commit()
         conn.close()
         
-        return success
+        return {'success': True, 'message': 'Room ended successfully'}
     
     def join_room(self, room_code, student_id):
         """Student joins a room"""
@@ -377,12 +420,41 @@ class RoomRepository:
         ''', (question_text, option_a, option_b, option_c, option_d, correct_answer, question_id))
         conn.commit()
     
+    def get_question_by_id(self, question_id):
+        """Get a question by ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, room_id, question_text, option_a, option_b, option_c, option_d, 
+                   correct_answer, question_order
+            FROM room_questions 
+            WHERE id = ?
+        ''', (question_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                'id': row[0],
+                'room_id': row[1],
+                'question_text': row[2],
+                'option_a': row[3],
+                'option_b': row[4],
+                'option_c': row[5],
+                'option_d': row[6],
+                'correct_answer': row[7],
+                'question_order': row[8]
+            }
+        return None
+    
     def delete_room_question(self, question_id):
         """Delete a room question"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('DELETE FROM room_questions WHERE id = ?', (question_id,))
         conn.commit()
+        conn.close()
     
     def delete_all_room_questions(self, room_id):
         """Delete all questions for a room"""
