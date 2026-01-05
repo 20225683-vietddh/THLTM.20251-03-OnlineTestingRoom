@@ -50,6 +50,18 @@ int py_socket_get_client_ip(socket_t socket, char* ip_buffer) {
     return socket_get_client_ip(socket, ip_buffer);
 }
 
+int py_socket_set_recv_timeout(socket_t socket, int seconds) {
+    return socket_set_recv_timeout(socket, seconds);
+}
+
+int py_socket_set_send_timeout(socket_t socket, int seconds) {
+    return socket_set_send_timeout(socket, seconds);
+}
+
+int py_socket_set_timeout(socket_t socket, int seconds) {
+    return socket_set_timeout(socket, seconds);
+}
+
 // ==================== THREADING API ====================
 
 void* py_server_accept_loop(void* context) {

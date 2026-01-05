@@ -259,6 +259,59 @@ int socket_get_client_ip(socket_t socket, char* ip_buffer) {
     return -1;
 }
 
+int socket_set_recv_timeout(socket_t socket, int seconds) {
+#ifdef _WIN32
+    // Windows: timeout in milliseconds (DWORD)
+    DWORD timeout = seconds * 1000;
+    if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, 
+                   (const char*)&timeout, sizeof(timeout)) == SOCKET_ERROR) {
+        return -1;
+    }
+#else
+    // UNIX/Linux: timeout in struct timeval
+    struct timeval timeout;
+    timeout.tv_sec = seconds;
+    timeout.tv_usec = 0;
+    if (setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, 
+                   &timeout, sizeof(timeout)) < 0) {
+        return -1;
+    }
+#endif
+    return 0;
+}
+
+int socket_set_send_timeout(socket_t socket, int seconds) {
+#ifdef _WIN32
+    // Windows: timeout in milliseconds (DWORD)
+    DWORD timeout = seconds * 1000;
+    if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, 
+                   (const char*)&timeout, sizeof(timeout)) == SOCKET_ERROR) {
+        return -1;
+    }
+#else
+    // UNIX/Linux: timeout in struct timeval
+    struct timeval timeout;
+    timeout.tv_sec = seconds;
+    timeout.tv_usec = 0;
+    if (setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, 
+                   &timeout, sizeof(timeout)) < 0) {
+        return -1;
+    }
+#endif
+    return 0;
+}
+
+int socket_set_timeout(socket_t socket, int seconds) {
+    // Set both recv and send timeout
+    if (socket_set_recv_timeout(socket, seconds) != 0) {
+        return -1;
+    }
+    if (socket_set_send_timeout(socket, seconds) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
 void socket_close(socket_t socket) {
     if (socket != INVALID_SOCKET) {
         // Close socket (initiates connection termination)

@@ -189,6 +189,19 @@ class ProtocolWrapper:
         self.lib.py_get_unix_timestamp.argtypes = []
         self.lib.py_get_unix_timestamp.restype = ctypes.c_int64
         
+        # === Socket Timeout Functions ===
+        # py_socket_set_recv_timeout
+        self.lib.py_socket_set_recv_timeout.argtypes = [socket_type, ctypes.c_int]
+        self.lib.py_socket_set_recv_timeout.restype = ctypes.c_int
+        
+        # py_socket_set_send_timeout
+        self.lib.py_socket_set_send_timeout.argtypes = [socket_type, ctypes.c_int]
+        self.lib.py_socket_set_send_timeout.restype = ctypes.c_int
+        
+        # py_socket_set_timeout
+        self.lib.py_socket_set_timeout.argtypes = [socket_type, ctypes.c_int]
+        self.lib.py_socket_set_timeout.restype = ctypes.c_int
+        
         # === Threading Functions ===
         # py_server_accept_loop
         self.lib.py_server_accept_loop.argtypes = [ctypes.c_void_p]
@@ -416,6 +429,48 @@ class ProtocolWrapper:
         if result == 0:
             return ip_buffer.value.decode('utf-8')
         return "unknown"
+    
+    def set_recv_timeout(self, socket, seconds):
+        """
+        Set receive timeout for socket
+        
+        Args:
+            socket: Socket descriptor
+            seconds: Timeout in seconds (0 = disable)
+            
+        Returns:
+            bool: True on success, False on error
+        """
+        result = self.lib.py_socket_set_recv_timeout(socket, seconds)
+        return result == 0
+    
+    def set_send_timeout(self, socket, seconds):
+        """
+        Set send timeout for socket
+        
+        Args:
+            socket: Socket descriptor
+            seconds: Timeout in seconds (0 = disable)
+            
+        Returns:
+            bool: True on success, False on error
+        """
+        result = self.lib.py_socket_set_send_timeout(socket, seconds)
+        return result == 0
+    
+    def set_timeout(self, socket, seconds):
+        """
+        Set both recv and send timeout for socket
+        
+        Args:
+            socket: Socket descriptor
+            seconds: Timeout in seconds (0 = disable)
+            
+        Returns:
+            bool: True on success, False on error
+        """
+        result = self.lib.py_socket_set_timeout(socket, seconds)
+        return result == 0
 
 
 # Message Type Names (for debugging)

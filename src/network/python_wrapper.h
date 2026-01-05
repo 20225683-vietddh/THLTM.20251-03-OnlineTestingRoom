@@ -91,6 +91,30 @@ int py_socket_is_alive(socket_t socket);
  */
 int py_socket_get_client_ip(socket_t socket, char* ip_buffer);
 
+/**
+ * @brief Set receive timeout for socket
+ * @param socket Socket descriptor
+ * @param seconds Timeout in seconds (0 = disable)
+ * @return 0 on success, -1 on error
+ */
+int py_socket_set_recv_timeout(socket_t socket, int seconds);
+
+/**
+ * @brief Set send timeout for socket
+ * @param socket Socket descriptor
+ * @param seconds Timeout in seconds (0 = disable)
+ * @return 0 on success, -1 on error
+ */
+int py_socket_set_send_timeout(socket_t socket, int seconds);
+
+/**
+ * @brief Set both recv and send timeout for socket
+ * @param socket Socket descriptor
+ * @param seconds Timeout in seconds (0 = disable)
+ * @return 0 on success, -1 on error
+ */
+int py_socket_set_timeout(socket_t socket, int seconds);
+
 // ==================== THREADING API ====================
 
 /**

@@ -16,7 +16,6 @@ from protocol_wrapper import (
     MSG_AUTO_SAVE_REQ
 )
 
-
 class ClientHandler:
     """Handles individual client connections"""
     
@@ -45,6 +44,12 @@ class ClientHandler:
         """Handle client communication"""
         # Get client IP from C
         client_ip = self.proto.get_client_ip(client_socket)
+        
+        # Set SEND timeout only (60s) - protect against network block
+        if not self.proto.set_send_timeout(client_socket, 60):
+            self.log(f"⚠️ Failed to set send timeout for {client_ip}")
+        else:
+            self.log(f"[OK] Set 60s send timeout for {client_ip}")
         
         try:
             # Wait for authentication (REGISTER or LOGIN)
