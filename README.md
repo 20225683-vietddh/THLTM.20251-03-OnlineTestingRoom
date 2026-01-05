@@ -21,13 +21,13 @@ Project/
 │   ├── network/                    # C Network Layer (Clean Architecture)
 │   │   ├── core/                   # Core modules (layered design)
 │   │   │   ├── socket_ops.h        # Transport Layer (TCP/IP)
-│   │   │   ├── socket_ops.c        #
+│   │   │   ├── socket_ops.c
 │   │   │   │
 │   │   │   ├── protocol.h          # Application Layer (TAP Protocol)
-│   │   │   ├── protocol.c          #
+│   │   │   ├── protocol.c
 │   │   │   │
 │   │   │   ├── utils.h             # Utilities
-│   │   │   └── utils.c             #
+│   │   │   └── utils.c
 │   │   │
 │   │   ├── network.h               # Main header (includes all)
 │   │   └── python_wrapper.c        # Python ctypes interface
@@ -93,8 +93,8 @@ Project/
 ├── Makefile                    # Cross-platform build configuration
 ├── requirements.txt            # Python dependencies
 ├── .gitignore                  # Git ignore rules
-├── README.md                   # 📖 Main documentation
-└── PROTOCOL_SPEC.md            # 📋 Protocol technical spec
+├── README.md                   # Main documentation
+└── PROTOCOL_SPEC.md            # Protocol technical spec
 ```
 
 ---
@@ -183,8 +183,8 @@ python src/python/tests/test_auth.py
 
 - ✅ Tạo database `data/app.db`
 - ✅ Tạo 2 accounts mẫu:
-  - Teacher: `teacher1` / `teacher123`
-  - Student: `student1` / `student123`
+  - Teacher: `teacher1` / `teacher1`
+  - Student: `student2` / `123456`
 
 ---
 
