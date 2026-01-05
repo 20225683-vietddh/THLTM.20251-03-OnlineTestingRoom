@@ -183,6 +183,82 @@ int socket_receive_data(socket_t socket, char* buffer, int buffer_size) {
 
 // ==================== CONNECTION MANAGEMENT ====================
 
+int socket_is_alive(socket_t socket) {
+    // Use MSG_PEEK to check without consuming data
+    // MSG_DONTWAIT/O_NONBLOCK for non-blocking check
+    char buf[1];
+    
+#ifdef _WIN32
+    // Windows: Use ioctlsocket to set non-blocking temporarily
+    u_long mode = 1;  // Non-blocking
+    ioctlsocket(socket, FIONBIO, &mode);
+    
+    int result = recv(socket, buf, 1, MSG_PEEK);
+    
+    // Restore blocking mode
+    mode = 0;
+    ioctlsocket(socket, FIONBIO, &mode);
+    
+    if (result == 0) {
+        return 0;  // Connection closed gracefully
+    }
+    
+    if (result == SOCKET_ERROR) {
+        int error = WSAGetLastError();
+        if (error == WSAEWOULDBLOCK) {
+            return 1;  // No data available but connection alive
+        }
+        return 0;  // Error = connection dead
+    }
+    
+    return 1;  // Has data = alive
+#else
+    // Linux/Unix: Use MSG_DONTWAIT flag
+    int result = recv(socket, buf, 1, MSG_PEEK | MSG_DONTWAIT);
+    
+    if (result == 0) {
+        return 0;  // Connection closed gracefully
+    }
+    
+    if (result == SOCKET_ERROR) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            return 1;  // No data available but connection alive
+        }
+        return 0;  // Error = connection dead
+    }
+    
+    return 1;  // Has data = alive
+#endif
+}
+
+int socket_get_client_ip(socket_t socket, char* ip_buffer) {
+    if (!ip_buffer) {
+        return -1;
+    }
+    
+    struct sockaddr_in addr;
+#ifdef _WIN32
+    int addr_len = sizeof(addr);
+#else
+    socklen_t addr_len = sizeof(addr);
+#endif
+    
+    // Get peer address
+    if (getpeername(socket, (struct sockaddr*)&addr, &addr_len) == SOCKET_ERROR) {
+        return -1;
+    }
+    
+    // Convert to string (IPv4)
+    const char* ip_str = inet_ntoa(addr.sin_addr);
+    if (ip_str) {
+        strncpy(ip_buffer, ip_str, 16);
+        ip_buffer[15] = '\0';  // Ensure null-terminated
+        return 0;
+    }
+    
+    return -1;
+}
+
 void socket_close(socket_t socket) {
     if (socket != INVALID_SOCKET) {
         // Close socket (initiates connection termination)

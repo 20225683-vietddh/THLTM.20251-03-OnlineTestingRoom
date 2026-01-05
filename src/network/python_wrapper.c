@@ -42,6 +42,14 @@ int64_t py_get_unix_timestamp(void) {
     return utils_get_unix_timestamp();
 }
 
+int py_socket_is_alive(socket_t socket) {
+    return socket_is_alive(socket);
+}
+
+int py_socket_get_client_ip(socket_t socket, char* ip_buffer) {
+    return socket_get_client_ip(socket, ip_buffer);
+}
+
 // ==================== THREADING API ====================
 
 void* py_server_accept_loop(void* context) {

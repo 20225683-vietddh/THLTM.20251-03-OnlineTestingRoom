@@ -85,6 +85,21 @@ int socket_receive_data(socket_t socket, char* buffer, int buffer_size);
 // ==================== CONNECTION MANAGEMENT ====================
 
 /**
+ * @brief Check if socket connection is still alive
+ * @param socket Socket descriptor
+ * @return 1 if alive, 0 if dead, -1 on error
+ */
+int socket_is_alive(socket_t socket);
+
+/**
+ * @brief Get client IP address from socket
+ * @param socket Client socket descriptor
+ * @param ip_buffer Buffer to store IP (min 16 bytes for IPv4)
+ * @return 0 on success, -1 on error
+ */
+int socket_get_client_ip(socket_t socket, char* ip_buffer);
+
+/**
  * @brief Close socket and release resources
  * @param socket Socket descriptor to close
  */

@@ -43,6 +43,9 @@ class ClientHandler:
     
     def handle_client(self, client_socket):
         """Handle client communication"""
+        # Get client IP from C
+        client_ip = self.proto.get_client_ip(client_socket)
+        
         try:
             # Wait for authentication (REGISTER or LOGIN)
             request = self.proto.receive_message(client_socket)
@@ -62,9 +65,13 @@ class ClientHandler:
                     self.clients[client_socket] = {
                         'username': session['username'],
                         'role': session['role'],
-                        'status': 'connected'
+                        'status': 'connected',
+                        'ip_address': client_ip  # Store IP from C
                     }
                     self.update_callbacks['students_list']()
+                    
+                    # Log with IP address
+                    self.log(f"[OK] {session['username']} ({session['role']}) logged in from {client_ip}")
                     
                     # Handle based on role
                     if session['role'] == 'student':

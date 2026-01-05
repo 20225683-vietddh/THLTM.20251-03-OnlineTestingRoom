@@ -43,6 +43,7 @@ class TestServerGUI(ctk.CTk):
         self.clients = {}
         self.server_context = None
         self.server_thread = None
+        self.broadcast_manager = None  # Will be initialized in start_server if needed
         
         # Setup GUI FIRST (so append_log works)
         self.setup_gui()
@@ -258,15 +259,27 @@ class TestServerGUI(ctk.CTk):
     def update_students_list(self):
         """Update connected users list (thread-safe)"""
         def _update():
+            # Clean up dead connections using C health check
+            dead_sockets = []
+            for socket in list(self.clients.keys()):
+                if not self.proto.is_connection_alive(socket):
+                    dead_sockets.append(socket)
+            
+            for socket in dead_sockets:
+                user = self.clients[socket]
+                self.append_log(f"⚠️ {user['username']} connection lost (auto cleanup)")
+                del self.clients[socket]
+            
             self.users_list.configure(state="normal")
             self.users_list.delete("1.0", "end")
             
             if self.clients:
-                for client_info in self.clients.values():
+                for socket, client_info in self.clients.items():
                     status_icon = "📝" if client_info.get('status') == "testing" else "[OK]"
                     role_icon = "👨‍🎓" if client_info['role'] == "student" else "👨‍🏫"
+                    ip = client_info.get('ip_address', 'unknown')
                     self.users_list.insert("end", 
-                        f"{status_icon} {role_icon} {client_info['username']} ({client_info['status']})\n"
+                        f"{status_icon} {role_icon} {client_info['username']} ({ip})\n"
                     )
             else:
                 self.users_list.insert("end", "No connected users")
@@ -304,24 +317,29 @@ class TestServerGUI(ctk.CTk):
         """Handle window close"""
         self.server_running = False
         
-        # Stop C server context
-        if self.server_context:
+        # Stop C server context (socket will be closed inside)
+        if hasattr(self, 'server_context') and self.server_context:
             self.server_context.running = 0
             try:
                 self.proto.lib.py_server_context_destroy(
                     ctypes.byref(self.server_context)
                 )
-            except:
-                pass
+            except Exception as e:
+                print(f"Error destroying server context: {e}")
         
-        # Close server socket
-        if self.server_socket:
+        # Cleanup broadcast manager (if exists)
+        if hasattr(self, 'broadcast_manager') and self.broadcast_manager:
             try:
-                self.proto.close_socket(self.server_socket)
-            except:
-                pass
+                self.proto.lib.py_broadcast_manager_destroy(
+                    ctypes.byref(self.broadcast_manager)
+                )
+            except Exception as e:
+                print(f"Error destroying broadcast manager: {e}")
         
         # Cleanup network
-        self.proto.cleanup_network()
+        try:
+            self.proto.cleanup_network()
+        except Exception as e:
+            print(f"Error cleaning up network: {e}")
+        
         self.destroy()
-

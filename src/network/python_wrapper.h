@@ -76,6 +76,21 @@ void py_generate_message_id(char* message_id);
  */
 int64_t py_get_unix_timestamp(void);
 
+/**
+ * @brief Check if socket connection is alive
+ * @param socket Socket descriptor
+ * @return 1 if alive, 0 if dead, -1 on error
+ */
+int py_socket_is_alive(socket_t socket);
+
+/**
+ * @brief Get client IP address
+ * @param socket Client socket
+ * @param ip_buffer Buffer for IP (min 16 bytes)
+ * @return 0 on success, -1 on error
+ */
+int py_socket_get_client_ip(socket_t socket, char* ip_buffer);
+
 // ==================== THREADING API ====================
 
 /**

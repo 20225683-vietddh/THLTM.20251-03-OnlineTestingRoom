@@ -387,6 +387,35 @@ class ProtocolWrapper:
     def close_socket(self, socket):
         """Close socket connection"""
         self.lib.py_close_socket(socket)
+    
+    def is_connection_alive(self, socket):
+        """
+        Check if socket connection is still alive
+        
+        Args:
+            socket: Socket descriptor
+            
+        Returns:
+            bool: True if connection alive, False otherwise
+        """
+        result = self.lib.py_socket_is_alive(socket)
+        return result == 1
+    
+    def get_client_ip(self, socket):
+        """
+        Get client IP address from socket
+        
+        Args:
+            socket: Client socket descriptor
+            
+        Returns:
+            str: IP address string, or "unknown" if failed
+        """
+        ip_buffer = ctypes.create_string_buffer(16)
+        result = self.lib.py_socket_get_client_ip(socket, ip_buffer)
+        if result == 0:
+            return ip_buffer.value.decode('utf-8')
+        return "unknown"
 
 
 # Message Type Names (for debugging)
