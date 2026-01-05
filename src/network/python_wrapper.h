@@ -149,4 +149,89 @@ void py_server_context_destroy(server_context_t* ctx);
  */
 int py_thread_create_client_handler(client_handler_func handler, client_context_t* context);
 
+// ==================== BROADCAST API ====================
+
+/**
+ * @brief Initialize broadcast manager
+ * Must be called once at server startup
+ */
+void py_broadcast_init(void);
+
+/**
+ * @brief Destroy broadcast manager
+ * Must be called at server shutdown
+ */
+void py_broadcast_destroy(void);
+
+/**
+ * @brief Register a client socket with a room ID
+ * @param socket Client socket descriptor
+ * @param room_id Room ID
+ * @return 0 on success, -1 on error
+ */
+int py_broadcast_register(socket_t socket, int room_id);
+
+/**
+ * @brief Unregister a client socket
+ * @param socket Client socket descriptor
+ */
+void py_broadcast_unregister(socket_t socket);
+
+/**
+ * @brief Update room ID for an existing client
+ * @param socket Client socket descriptor
+ * @param room_id New room ID
+ * @return 0 on success, -1 if socket not found
+ */
+int py_broadcast_update_room(socket_t socket, int room_id);
+
+/**
+ * @brief Broadcast message to all clients in a room
+ * @param room_id Room ID
+ * @param msg_type Message type
+ * @param json_data JSON payload
+ * @return Number of clients that received the message
+ */
+int py_broadcast_to_room(int room_id, int msg_type, const char* json_data);
+
+// ==================== CLIENT SELECT LOOP API ====================
+
+/**
+ * @brief Callback function type for broadcast messages
+ * @param msg_type Message type
+ * @param json_data JSON payload
+ */
+typedef void (*py_broadcast_callback_t)(int msg_type, const char* json_data);
+
+/**
+ * @brief Start client select loop in background thread
+ * @param socket Client socket descriptor
+ * @param session_token Session token for authenticated requests
+ * @param callback Python callback for broadcast messages
+ * @return 0 on success, -1 on error
+ */
+int py_client_select_loop_start(socket_t socket, const char* session_token, py_broadcast_callback_t callback);
+
+/**
+ * @brief Stop client select loop thread
+ */
+void py_client_select_loop_stop(void);
+
+/**
+ * @brief Send request and wait for response (blocking, thread-safe)
+ * @param msg_type Message type
+ * @param json_data JSON payload
+ * @param response_buf Buffer for response
+ * @param response_buf_size Buffer size
+ * @return 0 on success, -1 on error
+ */
+int py_client_select_loop_send_request(int msg_type, const char* json_data,
+                                        char* response_buf, int response_buf_size);
+
+/**
+ * @brief Check if select loop is running
+ * @return 1 if running, 0 otherwise
+ */
+int py_client_select_loop_is_running(void);
+
 #endif // PYTHON_WRAPPER_H

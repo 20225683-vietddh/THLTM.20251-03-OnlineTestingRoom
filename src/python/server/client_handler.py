@@ -7,7 +7,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from protocol_wrapper import (
-    MSG_REGISTER_REQ, MSG_LOGIN_REQ,
+    MSG_REGISTER_REQ, MSG_LOGIN_REQ, MSG_TEACHER_DATA_REQ,
     MSG_CREATE_ROOM_REQ, MSG_GET_ROOMS_REQ,
     MSG_START_ROOM_REQ, MSG_END_ROOM_REQ,
     MSG_ADD_QUESTION_REQ, MSG_GET_QUESTIONS_REQ, MSG_DELETE_QUESTION_REQ,
@@ -83,8 +83,7 @@ class ClientHandler:
                         # Student: handle room-based workflow
                         self._handle_student_requests(client_socket, session)
                     else:
-                        # Teacher: send initial data then handle room management
-                        self.handlers.handle_teacher_data(client_socket, session)
+                        # Teacher: handle room management (no auto-send data)
                         self._handle_teacher_requests(client_socket, session)
                     
             else:
@@ -99,6 +98,13 @@ class ClientHandler:
                 self.log(f"✗ {user['username']} disconnected")
                 del self.clients[client_socket]
                 self.update_callbacks['students_list']()
+            
+            # Unregister from broadcast (C handles cleanup)
+            try:
+                self.proto.broadcast_unregister(client_socket)
+            except:
+                pass
+            
             try:
                 self.proto.close_socket(client_socket)
             except:
@@ -154,7 +160,10 @@ class ClientHandler:
                 msg_type = request['message_type']
                 
                 # Route request
-                if msg_type == MSG_CREATE_ROOM_REQ:
+                if msg_type == MSG_TEACHER_DATA_REQ:
+                    self.handlers.handle_teacher_data(client_socket, session, request)
+                
+                elif msg_type == MSG_CREATE_ROOM_REQ:
                     self.handlers.handle_create_room(client_socket, session, request)
                 
                 elif msg_type == MSG_GET_ROOMS_REQ:

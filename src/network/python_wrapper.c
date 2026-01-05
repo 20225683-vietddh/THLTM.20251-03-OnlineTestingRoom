@@ -1,4 +1,6 @@
 #include "python_wrapper.h"
+#include "core/broadcast.h"
+#include "core/client_select_loop.h"
 
 int py_init_network(void) {
     return socket_init_network();
@@ -79,4 +81,49 @@ void py_server_context_destroy(server_context_t* ctx) {
 
 int py_thread_create_client_handler(client_handler_func handler, client_context_t* context) {
     return thread_create_client_handler(handler, context);
+}
+
+// ==================== BROADCAST API ====================
+
+void py_broadcast_init(void) {
+    broadcast_init();
+}
+
+void py_broadcast_destroy(void) {
+    broadcast_destroy();
+}
+
+int py_broadcast_register(socket_t socket, int room_id) {
+    return broadcast_register(socket, room_id);
+}
+
+void py_broadcast_unregister(socket_t socket) {
+    broadcast_unregister(socket);
+}
+
+int py_broadcast_update_room(socket_t socket, int room_id) {
+    return broadcast_update_room(socket, room_id);
+}
+
+int py_broadcast_to_room(int room_id, int msg_type, const char* json_data) {
+    return broadcast_to_room(room_id, msg_type, json_data);
+}
+
+// ==================== CLIENT SELECT LOOP API ====================
+
+int py_client_select_loop_start(socket_t socket, const char* session_token, py_broadcast_callback_t callback) {
+    return client_select_loop_start(socket, session_token, (broadcast_callback_t)callback);
+}
+
+void py_client_select_loop_stop(void) {
+    client_select_loop_stop();
+}
+
+int py_client_select_loop_send_request(int msg_type, const char* json_data,
+                                        char* response_buf, int response_buf_size) {
+    return client_select_loop_send_request(msg_type, json_data, response_buf, response_buf_size);
+}
+
+int py_client_select_loop_is_running(void) {
+    return client_select_loop_is_running();
 }

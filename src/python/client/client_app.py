@@ -30,6 +30,9 @@ class TestClientApp(ctk.CTk):
         self.conn = ConnectionManager()
         self.conn.init_network()
         
+        # Set broadcast callback for real-time updates (before login)
+        self.conn.set_broadcast_callback(self._handle_broadcast)
+        
         # UI state
         self.current_user = None
         self.current_role = None
@@ -415,6 +418,34 @@ class TestClientApp(ctk.CTk):
         """Show error dialog"""
         from tkinter import messagebox
         messagebox.showerror(title, message)
+    
+    def _handle_broadcast(self, msg_type, data):
+        """
+        Handle broadcast messages from server (called by C select loop)
+        Runs in C thread context - use after() to update UI in main thread
+        
+        Args:
+            msg_type: Message type (int)
+            data: Parsed JSON data (dict)
+        """
+        from protocol_wrapper import MSG_ROOM_STATUS
+        
+        if msg_type == MSG_ROOM_STATUS:
+            room_id = data.get('room_id')
+            status = data.get('status')
+            action = data.get('action')
+            
+            # Schedule UI update in main thread
+            self.after(0, self._update_room_status_ui, room_id, status, action)
+    
+    def _update_room_status_ui(self, room_id, status, action):
+        """Update UI after receiving room status broadcast (runs in main thread)"""
+        if self.student_window:
+            # Student is viewing rooms - auto-refresh both lists
+            try:
+                self.handle_refresh_student_rooms()
+            except Exception as e:
+                print(f"[ERROR] Failed to refresh UI: {e}")
     
     def on_closing(self):
         """Handle window close"""

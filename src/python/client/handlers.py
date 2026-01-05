@@ -3,7 +3,7 @@ Client Handlers
 Handles teacher and student interface logic
 """
 from protocol_wrapper import (
-    MSG_TEACHER_DATA_RES, MSG_TEST_CONFIG, MSG_TEST_START_REQ,
+    MSG_TEACHER_DATA_REQ, MSG_TEACHER_DATA_RES, MSG_TEST_CONFIG, MSG_TEST_START_REQ,
     MSG_TEST_START_RES, MSG_TEST_QUESTIONS, MSG_TEST_SUBMIT,
     MSG_TEST_RESULT, MSG_ERROR,
     MSG_CREATE_ROOM_REQ, MSG_CREATE_ROOM_RES,
@@ -32,30 +32,19 @@ class TeacherHandler:
     def load_dashboard(self, full_name):
         """Load teacher dashboard"""
         try:
-            # Receive data from server (auto-sent after login)
-            response = self.conn.receive_message()
+            # Send request via C select loop (not auto-sent by server)
+            payload = self.conn.send_request(MSG_TEACHER_DATA_REQ, {})
             
-            # Check for error
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(f"Server error: {error_msg}")
-            
-            # Process teacher data
-            if response['message_type'] == MSG_TEACHER_DATA_RES:
-                payload = response.get('payload', {})
-                
-                if 'data' not in payload:
-                    raise ValueError("Server response missing data")
-                
-                data = payload['data']
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                data = payload.get('data', {})
                 results = data.get('results', [])
                 rooms = data.get('rooms', [])
                 
                 # Show dashboard via UI callback
                 self.ui['show_dashboard'](full_name, results, rooms)
                 return True
-            
-            raise ValueError("Unexpected response from server")
+            else:
+                raise ValueError(payload.get('message', 'Failed to load dashboard'))
             
         except Exception as e:
             raise Exception(f"Failed to load teacher dashboard: {str(e)}")
@@ -63,33 +52,22 @@ class TeacherHandler:
     def create_room(self, room_name, num_questions, duration_minutes):
         """Create a new test room"""
         try:
-            # Send create room request
-            self.conn.send_message(MSG_CREATE_ROOM_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_CREATE_ROOM_REQ, {
                 'room_name': room_name,
                 'num_questions': num_questions,
                 'duration_minutes': duration_minutes
             })
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_CREATE_ROOM_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    data = payload.get('data', {})
-                    return {
-                        'success': True,
-                        'room_id': data.get('room_id'),
-                        'room_code': data.get('room_code')
-                    }
-                else:
-                    return {'success': False, 'message': payload.get('message')}
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                data = payload.get('data', {})
+                return {
+                    'success': True,
+                    'room_id': data.get('room_id'),
+                    'room_code': data.get('room_code')
+                }
+            else:
+                return {'success': False, 'message': payload.get('message')}
             
         except Exception as e:
             raise Exception(f"Failed to create room: {str(e)}")
@@ -97,25 +75,14 @@ class TeacherHandler:
     def refresh_rooms(self):
         """Refresh room list"""
         try:
-            # Send get rooms request
-            self.conn.send_message(MSG_GET_ROOMS_REQ, {})
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_GET_ROOMS_REQ, {})
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_GET_ROOMS_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    data = payload.get('data', {})
-                    return data.get('rooms', [])
-                else:
-                    raise ValueError(payload.get('message', 'Failed to get rooms'))
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                data = payload.get('data', {})
+                return data.get('rooms', [])
+            else:
+                raise ValueError(payload.get('message', 'Failed to get rooms'))
             
         except Exception as e:
             raise Exception(f"Failed to refresh rooms: {str(e)}")
@@ -123,26 +90,15 @@ class TeacherHandler:
     def start_room(self, room_id):
         """Start test in a room"""
         try:
-            # Send start room request
-            self.conn.send_message(MSG_START_ROOM_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_START_ROOM_REQ, {
                 'room_id': room_id
             })
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_START_ROOM_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    return {'success': True}
-                else:
-                    return {'success': False, 'message': payload.get('message')}
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                return {'success': True}
+            else:
+                return {'success': False, 'message': payload.get('message')}
             
         except Exception as e:
             raise Exception(f"Failed to start room: {str(e)}")
@@ -150,26 +106,15 @@ class TeacherHandler:
     def end_room(self, room_id):
         """End test in a room"""
         try:
-            # Send end room request
-            self.conn.send_message(MSG_END_ROOM_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_END_ROOM_REQ, {
                 'room_id': room_id
             })
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_END_ROOM_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    return {'success': True}
-                else:
-                    return {'success': False, 'message': payload.get('message')}
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                return {'success': True}
+            else:
+                return {'success': False, 'message': payload.get('message')}
             
         except Exception as e:
             raise Exception(f"Failed to end room: {str(e)}")
@@ -177,8 +122,8 @@ class TeacherHandler:
     def add_question(self, room_id, question_text, option_a, option_b, option_c, option_d, correct_answer):
         """Add a question to a room"""
         try:
-            # Send add question request
-            self.conn.send_message(MSG_ADD_QUESTION_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_ADD_QUESTION_REQ, {
                 'room_id': room_id,
                 'question_text': question_text,
                 'option_a': option_a,
@@ -188,21 +133,10 @@ class TeacherHandler:
                 'correct_answer': correct_answer
             })
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_ADD_QUESTION_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    return {'success': True, 'question_id': payload.get('data', {}).get('question_id')}
-                else:
-                    return {'success': False, 'message': payload.get('message')}
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                return {'success': True, 'question_id': payload.get('data', {}).get('question_id')}
+            else:
+                return {'success': False, 'message': payload.get('message')}
             
         except Exception as e:
             raise Exception(f"Failed to add question: {str(e)}")
@@ -210,27 +144,16 @@ class TeacherHandler:
     def get_questions(self, room_id):
         """Get questions for a room"""
         try:
-            # Send get questions request
-            self.conn.send_message(MSG_GET_QUESTIONS_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_GET_QUESTIONS_REQ, {
                 'room_id': room_id
             })
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_GET_QUESTIONS_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    data = payload.get('data', {})
-                    return data.get('questions', [])
-                else:
-                    raise ValueError(payload.get('message', 'Failed to get questions'))
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                data = payload.get('data', {})
+                return data.get('questions', [])
+            else:
+                raise ValueError(payload.get('message', 'Failed to get questions'))
             
         except Exception as e:
             raise Exception(f"Failed to get questions: {str(e)}")
@@ -238,26 +161,15 @@ class TeacherHandler:
     def delete_question(self, question_id):
         """Delete a question"""
         try:
-            # Send delete question request
-            self.conn.send_message(MSG_DELETE_QUESTION_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_DELETE_QUESTION_REQ, {
                 'question_id': question_id
             })
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_DELETE_QUESTION_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    return {'success': True}
-                else:
-                    return {'success': False, 'message': payload.get('message')}
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                return {'success': True}
+            else:
+                return {'success': False, 'message': payload.get('message')}
             
         except Exception as e:
             raise Exception(f"Failed to delete question: {str(e)}")
@@ -275,31 +187,20 @@ class StudentHandler:
     def join_room(self, room_id):
         """Join a test room by room ID"""
         try:
-            # Send join room request
-            self.conn.send_message(MSG_JOIN_ROOM_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_JOIN_ROOM_REQ, {
                 'room_id': room_id
             })
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_JOIN_ROOM_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    data = payload.get('data', {})
-                    return {
-                        'success': True,
-                        'room_name': data.get('room_name'),
-                        'room_id': data.get('room_id')
-                    }
-                else:
-                    return {'success': False, 'message': payload.get('message')}
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                data = payload.get('data', {})
+                return {
+                    'success': True,
+                    'room_name': data.get('room_name'),
+                    'room_id': data.get('room_id')
+                }
+            else:
+                return {'success': False, 'message': payload.get('message')}
             
         except Exception as e:
             raise Exception(f"Failed to join room: {str(e)}")
@@ -307,25 +208,14 @@ class StudentHandler:
     def refresh_rooms(self):
         """Get list of rooms student has joined"""
         try:
-            # Send get student rooms request
-            self.conn.send_message(MSG_GET_STUDENT_ROOMS_REQ, {})
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_GET_STUDENT_ROOMS_REQ, {})
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_GET_STUDENT_ROOMS_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    data = payload.get('data', {})
-                    return data.get('rooms', [])
-                else:
-                    raise ValueError(payload.get('message', 'Failed to get rooms'))
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                data = payload.get('data', {})
+                return data.get('rooms', [])
+            else:
+                raise ValueError(payload.get('message', 'Failed to get rooms'))
             
         except Exception as e:
             raise Exception(f"Failed to refresh rooms: {str(e)}")
@@ -333,25 +223,14 @@ class StudentHandler:
     def get_available_rooms(self):
         """Get list of available rooms to join"""
         try:
-            # Send get available rooms request
-            self.conn.send_message(MSG_GET_AVAILABLE_ROOMS_REQ, {})
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_GET_AVAILABLE_ROOMS_REQ, {})
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_GET_AVAILABLE_ROOMS_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    data = payload.get('data', {})
-                    return data.get('rooms', [])
-                else:
-                    raise ValueError(payload.get('message', 'Failed to get available rooms'))
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                data = payload.get('data', {})
+                return data.get('rooms', [])
+            else:
+                raise ValueError(payload.get('message', 'Failed to get available rooms'))
             
         except Exception as e:
             raise Exception(f"Failed to get available rooms: {str(e)}")
@@ -359,42 +238,31 @@ class StudentHandler:
     def start_room_test(self, room_id, cached_data=None):
         """Start test for a specific room (optionally resume from cache)"""
         try:
-            # Send start room test request
-            self.conn.send_message(MSG_START_ROOM_TEST_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_START_ROOM_TEST_REQ, {
                 'room_id': room_id
             })
             
-            # Receive response
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_START_ROOM_TEST_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    data = payload.get('data', {})
-                    questions = data.get('questions', [])
-                    duration = data.get('duration_minutes', 30)
-                    room_name = data.get('room_name', 'Test Room')
-                    server_timestamp = data.get('server_timestamp')  # Unix timestamp from C server
-                    
-                    # Show test screen via UI callback (with cached data if resuming)
-                    self.questions = questions
-                    self.ui['show_test'](questions, duration, room_id, cached_data, 
-                                        server_timestamp=server_timestamp)
-                    
-                    return {
-                        'success': True,
-                        'questions': questions,
-                        'duration': duration,
-                        'room_name': room_name
-                    }
-                else:
-                    return {'success': False, 'message': payload.get('message')}
-            
-            raise ValueError("Unexpected response")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                data = payload.get('data', {})
+                questions = data.get('questions', [])
+                duration = data.get('duration_minutes', 30)
+                room_name = data.get('room_name', 'Test Room')
+                server_timestamp = data.get('server_timestamp')  # Unix timestamp from C server
+                
+                # Show test screen via UI callback (with cached data if resuming)
+                self.questions = questions
+                self.ui['show_test'](questions, duration, room_id, cached_data, 
+                                    server_timestamp=server_timestamp)
+                
+                return {
+                    'success': True,
+                    'questions': questions,
+                    'duration': duration,
+                    'room_name': room_name
+                }
+            else:
+                return {'success': False, 'message': payload.get('message')}
             
         except Exception as e:
             raise Exception(f"Failed to start room test: {str(e)}")
@@ -414,31 +282,19 @@ class StudentHandler:
             if self.auto_save_in_progress:
                 print("⚠️ [SUBMIT] Auto-save still in progress, proceeding anyway...")
             
-            # Send submit request
-            self.conn.send_message(MSG_SUBMIT_ROOM_TEST_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_SUBMIT_ROOM_TEST_REQ, {
                 'room_id': room_id,
                 'answers': answers
             })
             
-            # Receive result
-            response = self.conn.receive_message()
-            
-            if response['message_type'] == MSG_ERROR:
-                error_msg = response['payload'].get('message', 'Unknown error')
-                raise ValueError(error_msg)
-            
-            if response['message_type'] == MSG_SUBMIT_ROOM_TEST_RES:
-                payload = response['payload']
-                if payload.get('code') == 1000:  # ERR_SUCCESS
-                    result = payload.get('data', {})
-                    
-                    # Show result via UI callback
-                    self.ui['show_result'](result)
-                    return True
-                else:
-                    raise ValueError(payload.get('message', 'Failed to submit test'))
-            
-            raise ValueError("Failed to receive result")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                result = payload.get('data', {})
+                # Show result via UI callback
+                self.ui['show_result'](result)
+                return True
+            else:
+                raise ValueError(payload.get('message', 'Failed to submit test'))
             
         except Exception as e:
             raise Exception(f"Failed to submit test: {str(e)}")
@@ -518,32 +374,23 @@ class StudentHandler:
         try:
             self.auto_save_in_progress = True
             
-            # Send auto-save request
-            self.conn.send_message(MSG_AUTO_SAVE_REQ, {
+            # Send request via C select loop
+            payload = self.conn.send_request(MSG_AUTO_SAVE_REQ, {
                 'room_id': room_id,
                 'answers': answers,
                 'is_final': is_final
             })
             
-            # Try to consume response (non-blocking, best effort)
-            # Note: socket is an int (C file descriptor), not Python socket object
-            try:
-                response = self.conn.receive_message()
-                
-                if response['message_type'] == MSG_AUTO_SAVE_RES:
-                    print("[AUTO-SAVE] Server acknowledged")
-                    return True
-            except Exception as e:
-                # Auto-save is non-critical, just log and continue
-                print(f"⚠️ Auto-save ACK error (non-critical): {e}")
+            if payload.get('code') == 1000:  # ERR_SUCCESS
+                print("[AUTO-SAVE] Server acknowledged")
+                return True
+            else:
+                print(f"⚠️ Auto-save error: {payload.get('message')}")
                 return False
-            finally:
-                self.auto_save_in_progress = False
-            
-            return False
             
         except Exception as e:
             print(f"⚠️ Auto-save error: {e}")
-            self.auto_save_in_progress = False
             return False
+        finally:
+            self.auto_save_in_progress = False
 

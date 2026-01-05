@@ -40,6 +40,8 @@ gcc -Wall -O2 %ARCH_FLAG% -shared ^
     src/network/core/protocol.c ^
     src/network/core/utils.c ^
     src/network/core/thread_pool.c ^
+    src/network/core/broadcast.c ^
+    src/network/core/client_select_loop.c ^
     src/network/python_wrapper.c ^
     -o lib/network.dll -lws2_32 -I src/network
 

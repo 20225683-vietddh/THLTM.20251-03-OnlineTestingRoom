@@ -15,7 +15,7 @@ from protocol_wrapper import (
     MSG_ADD_QUESTION_RES, MSG_GET_QUESTIONS_RES, MSG_DELETE_QUESTION_RES,
     MSG_JOIN_ROOM_RES, MSG_GET_STUDENT_ROOMS_RES, MSG_GET_AVAILABLE_ROOMS_RES,
     MSG_START_ROOM_TEST_RES, MSG_SUBMIT_ROOM_TEST_RES,
-    MSG_AUTO_SAVE_RES,
+    MSG_AUTO_SAVE_RES, MSG_ROOM_STATUS,
     ERR_SUCCESS, ERR_BAD_REQUEST, ERR_INVALID_CREDS,
     ERR_USERNAME_EXISTS, ERR_INTERNAL
 )
@@ -250,7 +250,7 @@ class RequestHandlers:
         except Exception as e:
             self.log(f"✗ Student test error: {str(e)}")
     
-    def handle_teacher_data(self, client_socket, session):
+    def handle_teacher_data(self, client_socket, session, request):
         """Handle teacher data request"""
         try:
             # Get all results and stats
@@ -444,6 +444,14 @@ class RequestHandlers:
             
             self.log(f"[OK] Room {room_id} ('{room['room_name']}') started by {session['username']} - {len(questions)} questions ready")
             
+            # Broadcast to all students in room (C handles iteration and sending)
+            num_notified = self.proto.broadcast_to_room(room_id, MSG_ROOM_STATUS, {
+                'room_id': room_id,
+                'status': 'in_progress',
+                'action': 'started'
+            })
+            self.log(f"[BROADCAST] Notified {num_notified} students in room {room_id}")
+            
             # Send response
             self.send_response(client_socket, MSG_START_ROOM_RES, {
                 'code': ERR_SUCCESS,
@@ -478,6 +486,14 @@ class RequestHandlers:
                 return
             
             self.log(f"[OK] Room {room_id} ended by {session['username']}")
+            
+            # Broadcast to all students in room (C handles iteration and sending)
+            num_notified = self.proto.broadcast_to_room(room_id, MSG_ROOM_STATUS, {
+                'room_id': room_id,
+                'status': 'ended',
+                'action': 'ended'
+            })
+            self.log(f"[BROADCAST] Notified {num_notified} students in room {room_id}")
             
             # Send response
             self.send_response(client_socket, MSG_END_ROOM_RES, {
@@ -691,6 +707,13 @@ class RequestHandlers:
             
             room = result['room']
             self.log(f"[OK] {session['username']} joined room: {room['room_name']} (ID: {room_id})")
+            
+            # Register client for broadcast (C handles socket tracking)
+            success = self.proto.broadcast_register(client_socket, room_id)
+            if success:
+                self.log(f"[BROADCAST] Registered {session['username']} for room {room_id} broadcasts")
+            else:
+                self.log(f"[BROADCAST] Warning: Failed to register {session['username']} for broadcasts")
             
             # Send success response
             self.send_response(client_socket, MSG_JOIN_ROOM_RES, {

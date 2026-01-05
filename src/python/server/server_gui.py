@@ -184,6 +184,10 @@ class TestServerGUI(ctk.CTk):
             self.server_socket = self.proto.create_server(port)
             self.server_running = True
             
+            # Initialize broadcast manager (C core)
+            self.proto.broadcast_init()
+            self.append_log("[BROADCAST] Manager initialized")
+            
             # Create C callback for client handler
             @ClientHandlerFunc
             def c_client_handler(ctx_ptr):
@@ -259,16 +263,9 @@ class TestServerGUI(ctk.CTk):
     def update_students_list(self):
         """Update connected users list (thread-safe)"""
         def _update():
-            # Clean up dead connections using C health check
-            dead_sockets = []
-            for socket in list(self.clients.keys()):
-                if not self.proto.is_connection_alive(socket):
-                    dead_sockets.append(socket)
-            
-            for socket in dead_sockets:
-                user = self.clients[socket]
-                self.append_log(f"⚠️ {user['username']} connection lost (auto cleanup)")
-                del self.clients[socket]
+            # Note: Don't use is_connection_alive() here!
+            # It causes race condition with client select loop thread
+            # Dead connections will be cleaned up naturally via exception handling
             
             self.users_list.configure(state="normal")
             self.users_list.delete("1.0", "end")
@@ -327,12 +324,11 @@ class TestServerGUI(ctk.CTk):
             except Exception as e:
                 print(f"Error destroying server context: {e}")
         
-        # Cleanup broadcast manager (if exists)
-        if hasattr(self, 'broadcast_manager') and self.broadcast_manager:
+        # Cleanup broadcast manager (C core)
+        if self.server_running:
             try:
-                self.proto.lib.py_broadcast_manager_destroy(
-                    ctypes.byref(self.broadcast_manager)
-                )
+                self.proto.broadcast_destroy()
+                print("[BROADCAST] Manager destroyed")
             except Exception as e:
                 print(f"Error destroying broadcast manager: {e}")
         

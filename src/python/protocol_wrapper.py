@@ -218,6 +218,64 @@ class ProtocolWrapper:
             ctypes.POINTER(ClientContext)
         ]
         self.lib.py_thread_create_client_handler.restype = ctypes.c_int
+        
+        # === Broadcast Functions ===
+        # py_broadcast_init
+        self.lib.py_broadcast_init.argtypes = []
+        self.lib.py_broadcast_init.restype = None
+        
+        # py_broadcast_destroy
+        self.lib.py_broadcast_destroy.argtypes = []
+        self.lib.py_broadcast_destroy.restype = None
+        
+        # py_broadcast_register
+        self.lib.py_broadcast_register.argtypes = [socket_type, ctypes.c_int]
+        self.lib.py_broadcast_register.restype = ctypes.c_int
+        
+        # py_broadcast_unregister
+        self.lib.py_broadcast_unregister.argtypes = [socket_type]
+        self.lib.py_broadcast_unregister.restype = None
+        
+        # py_broadcast_update_room
+        self.lib.py_broadcast_update_room.argtypes = [socket_type, ctypes.c_int]
+        self.lib.py_broadcast_update_room.restype = ctypes.c_int
+        
+        # py_broadcast_to_room
+        self.lib.py_broadcast_to_room.argtypes = [
+            ctypes.c_int,      # room_id
+            ctypes.c_int,      # msg_type
+            ctypes.c_char_p    # json_data
+        ]
+        self.lib.py_broadcast_to_room.restype = ctypes.c_int
+        
+        # === Client Select Loop Functions ===
+        # Define callback type for broadcast messages
+        self.BroadcastCallbackType = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.c_char_p)
+        
+        # py_client_select_loop_start
+        self.lib.py_client_select_loop_start.argtypes = [
+            socket_type,
+            ctypes.c_char_p,  # session_token
+            self.BroadcastCallbackType
+        ]
+        self.lib.py_client_select_loop_start.restype = ctypes.c_int
+        
+        # py_client_select_loop_stop
+        self.lib.py_client_select_loop_stop.argtypes = []
+        self.lib.py_client_select_loop_stop.restype = None
+        
+        # py_client_select_loop_send_request
+        self.lib.py_client_select_loop_send_request.argtypes = [
+            ctypes.c_int,      # msg_type
+            ctypes.c_char_p,   # json_data
+            ctypes.c_char_p,   # response_buf
+            ctypes.c_int       # response_buf_size
+        ]
+        self.lib.py_client_select_loop_send_request.restype = ctypes.c_int
+        
+        # py_client_select_loop_is_running
+        self.lib.py_client_select_loop_is_running.argtypes = []
+        self.lib.py_client_select_loop_is_running.restype = ctypes.c_int
     
     def send_message(self, socket, msg_type, payload_dict=None, use_session=True):
         """
@@ -421,6 +479,136 @@ class ProtocolWrapper:
         """
         result = self.lib.py_socket_set_timeout(socket, seconds)
         return result == 0
+    
+    # ==================== BROADCAST METHODS ====================
+    
+    def broadcast_init(self):
+        """Initialize broadcast manager (server-side)"""
+        self.lib.py_broadcast_init()
+    
+    def broadcast_destroy(self):
+        """Destroy broadcast manager (server-side)"""
+        self.lib.py_broadcast_destroy()
+    
+    def broadcast_register(self, socket, room_id):
+        """
+        Register a client socket with a room ID
+        
+        Args:
+            socket: Client socket descriptor
+            room_id: Room ID
+            
+        Returns:
+            bool: True on success, False on error
+        """
+        result = self.lib.py_broadcast_register(socket, room_id)
+        return result == 0
+    
+    def broadcast_unregister(self, socket):
+        """
+        Unregister a client socket
+        
+        Args:
+            socket: Client socket descriptor
+        """
+        self.lib.py_broadcast_unregister(socket)
+    
+    def broadcast_update_room(self, socket, room_id):
+        """
+        Update room ID for an existing client
+        
+        Args:
+            socket: Client socket descriptor
+            room_id: New room ID
+            
+        Returns:
+            bool: True on success, False if socket not found
+        """
+        result = self.lib.py_broadcast_update_room(socket, room_id)
+        return result == 0
+    
+    def broadcast_to_room(self, room_id, msg_type, payload_dict):
+        """
+        Broadcast message to all clients in a room (C handles iteration and sending)
+        
+        Args:
+            room_id: Room ID
+            msg_type: Message type (e.g., MSG_ROOM_STATUS)
+            payload_dict: Python dict to convert to JSON
+            
+        Returns:
+            int: Number of clients that received the message
+        """
+        json_data = json.dumps(payload_dict).encode('utf-8')
+        result = self.lib.py_broadcast_to_room(room_id, msg_type, json_data)
+        return result
+    
+    # ==================== CLIENT SELECT LOOP METHODS ====================
+    
+    def client_select_loop_start(self, socket, session_token, callback):
+        """
+        Start client select loop in background thread (C handles select loop)
+        
+        Args:
+            socket: Client socket descriptor
+            session_token: Session token for authenticated requests
+            callback: Python function(msg_type, json_data) to call for broadcast messages
+            
+        Returns:
+            bool: True on success, False on error
+        """
+        # Wrap Python callback to match C signature
+        def c_callback(msg_type, json_bytes):
+            json_str = json_bytes.decode('utf-8')
+            callback(msg_type, json_str)
+        
+        # Keep reference to prevent garbage collection
+        self._broadcast_callback = self.BroadcastCallbackType(c_callback)
+        
+        # Pass session token to C for authenticated requests
+        session_token_bytes = session_token.encode('utf-8') if session_token else None
+        result = self.lib.py_client_select_loop_start(socket, session_token_bytes, self._broadcast_callback)
+        return result == 0
+    
+    def client_select_loop_stop(self):
+        """Stop client select loop thread (C handles thread cleanup)"""
+        self.lib.py_client_select_loop_stop()
+    
+    def client_select_loop_send_request(self, msg_type, payload_dict, max_response_size=65536):
+        """
+        Send request and wait for response (C handles thread-safe queuing)
+        
+        Args:
+            msg_type: Message type
+            payload_dict: Python dict to convert to JSON
+            max_response_size: Maximum response buffer size
+            
+        Returns:
+            dict: Response payload as dict
+            
+        Raises:
+            RuntimeError: If send fails
+        """
+        json_data = json.dumps(payload_dict).encode('utf-8')
+        response_buf = ctypes.create_string_buffer(max_response_size)
+        
+        result = self.lib.py_client_select_loop_send_request(
+            msg_type,
+            json_data,
+            response_buf,
+            max_response_size
+        )
+        
+        if result != 0:
+            raise RuntimeError(f"Failed to send request (error: {result})")
+        
+        # Parse response
+        response_str = response_buf.value.decode('utf-8')
+        return json.loads(response_str)
+    
+    def client_select_loop_is_running(self):
+        """Check if select loop is running"""
+        return self.lib.py_client_select_loop_is_running() == 1
 
 
 # Message Type Names (for debugging)
