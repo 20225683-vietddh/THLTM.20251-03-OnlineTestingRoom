@@ -82,18 +82,28 @@
 #define ERR_USERNAME_EXISTS 5001
 #define ERR_INTERNAL        6000
 
+// Force struct to be packed without padding (cross-platform)
+#ifdef _WIN32
+    #pragma pack(push, 1)
+#endif
+
 typedef struct {
     uint32_t magic;              // 4 bytes: Protocol identifier (0x54415031)
     uint16_t version;            // 2 bytes: Protocol version (0x0100)
     uint16_t message_type;       // 2 bytes: Message type code
     uint32_t length;             // 4 bytes: Payload length in bytes
     char message_id[16];         // 16 bytes: Unique message identifier
-                                 // 4 bytes: Padding (compiler added for int64_t alignment)
     int64_t timestamp;           // 8 bytes: Unix timestamp (seconds since epoch)
     char session_token[32];      // 32 bytes: Session token (or zeros if not authenticated)
     char reserved[12];           // 12 bytes: Reserved for future use (zeros)
-                                 // 4 bytes: Padding (compiler added for struct alignment)
-} protocol_header_t;             // Total: 88 bytes with padding
+}
+#ifdef _WIN32
+    protocol_header_t;
+    #pragma pack(pop)
+#else
+    __attribute__((packed)) protocol_header_t;
+#endif
+// Total: 80 bytes (no padding)
 
 /**
  * @brief Initialize protocol header
