@@ -5,7 +5,6 @@
 #include "core/protocol.h"
 #include "core/utils.h"
 #include "core/thread_pool.h"
-#include "core/broadcast.h"
 
 #define NETWORK_LIBRARY_VERSION "1.0.0"
 #define NETWORK_LIBRARY_NAME "TAP Network Library"

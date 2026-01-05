@@ -86,14 +86,6 @@ class BroadcastClient(ctypes.Structure):
         ("active", ctypes.c_int)
     ]
 
-# Broadcast Manager Structure (matches C struct)
-class BroadcastManager(ctypes.Structure):
-    _fields_ = [
-        ("clients", BroadcastClient * 100),  # MAX_BROADCAST_CLIENTS
-        ("client_count", ctypes.c_int),
-        ("lock", ctypes.c_void_p)  # Opaque mutex
-    ]
-
 # Client handler function type
 ClientHandlerFunc = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.POINTER(ClientContext))
 
@@ -226,48 +218,6 @@ class ProtocolWrapper:
             ctypes.POINTER(ClientContext)
         ]
         self.lib.py_thread_create_client_handler.restype = ctypes.c_int
-        
-        # === Broadcast Functions ===
-        # py_broadcast_manager_init
-        self.lib.py_broadcast_manager_init.argtypes = [ctypes.POINTER(BroadcastManager)]
-        self.lib.py_broadcast_manager_init.restype = ctypes.c_int
-        
-        # py_broadcast_manager_register
-        self.lib.py_broadcast_manager_register.argtypes = [
-            ctypes.POINTER(BroadcastManager),
-            socket_type,
-            ctypes.c_int,
-            ctypes.c_char_p
-        ]
-        self.lib.py_broadcast_manager_register.restype = ctypes.c_int
-        
-        # py_broadcast_manager_unregister
-        self.lib.py_broadcast_manager_unregister.argtypes = [
-            ctypes.POINTER(BroadcastManager),
-            socket_type
-        ]
-        self.lib.py_broadcast_manager_unregister.restype = ctypes.c_int
-        
-        # py_broadcast_manager_update_room
-        self.lib.py_broadcast_manager_update_room.argtypes = [
-            ctypes.POINTER(BroadcastManager),
-            socket_type,
-            ctypes.c_int
-        ]
-        self.lib.py_broadcast_manager_update_room.restype = ctypes.c_int
-        
-        # py_broadcast_to_room
-        self.lib.py_broadcast_to_room.argtypes = [
-            ctypes.POINTER(BroadcastManager),
-            ctypes.c_int,
-            ctypes.c_uint16,
-            ctypes.c_char_p
-        ]
-        self.lib.py_broadcast_to_room.restype = ctypes.c_int
-        
-        # py_broadcast_manager_destroy
-        self.lib.py_broadcast_manager_destroy.argtypes = [ctypes.POINTER(BroadcastManager)]
-        self.lib.py_broadcast_manager_destroy.restype = None
     
     def send_message(self, socket, msg_type, payload_dict=None, use_session=True):
         """

@@ -80,31 +80,3 @@ void py_server_context_destroy(server_context_t* ctx) {
 int py_thread_create_client_handler(client_handler_func handler, client_context_t* context) {
     return thread_create_client_handler(handler, context);
 }
-
-// ==================== BROADCAST API ====================
-
-int py_broadcast_manager_init(broadcast_manager_t* mgr) {
-    return broadcast_init(mgr);
-}
-
-int py_broadcast_manager_register(broadcast_manager_t* mgr, socket_t socket,
-                                  int room_id, const char* username) {
-    return broadcast_register(mgr, socket, room_id);
-}
-
-int py_broadcast_manager_unregister(broadcast_manager_t* mgr, socket_t socket) {
-    return broadcast_unregister(mgr, socket);
-}
-
-int py_broadcast_manager_update_room(broadcast_manager_t* mgr, socket_t socket, int room_id) {
-    return broadcast_update_room(mgr, socket, room_id);
-}
-
-int py_broadcast_to_room(broadcast_manager_t* mgr, int room_id,
-                        uint16_t msg_type, const char* payload) {
-    return broadcast_to_room(mgr, room_id, msg_type, payload);
-}
-
-void py_broadcast_manager_destroy(broadcast_manager_t* mgr) {
-    broadcast_destroy(mgr);
-}
