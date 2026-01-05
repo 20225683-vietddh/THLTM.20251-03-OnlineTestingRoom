@@ -16,11 +16,11 @@ void utils_generate_message_id(char* message_id) {
     static int counter = 0;
     time_t now = time(NULL);
     
-    // Format: 8 hex digits (timestamp) + 8 hex digits (counter)
-    snprintf(message_id, 16, "%08x%08x", (unsigned int)now, counter++);
+    // Format: 8 hex digits (timestamp) + 7 hex digits (counter) + null = 16 bytes
+    snprintf(message_id, 16, "%08x%07x", (unsigned int)now, counter++);
     
-    // Pad remaining bytes with zeros
-    memset(message_id + strlen(message_id), 0, 16 - strlen(message_id));
+    // Ensure null termination
+    message_id[15] = '\0';
 }
 
 int64_t utils_get_unix_timestamp(void) {

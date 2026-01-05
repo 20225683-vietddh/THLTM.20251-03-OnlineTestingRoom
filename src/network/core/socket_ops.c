@@ -1,6 +1,7 @@
 #include "socket_ops.h"
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 
 // ==================== INITIALIZATION ====================
 
