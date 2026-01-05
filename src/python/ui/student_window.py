@@ -36,6 +36,7 @@ class StudentWindow:
         self.start_time = None
         self.timer_running = False
         self.room_id = None
+        self.username = None  # Current logged-in username
         
         # Auto-save state
         self.auto_save_interval = 10  # seconds (save every 10s)
@@ -56,8 +57,11 @@ class StudentWindow:
         self.joined_rooms_data = []
         self.available_rooms_data = []
     
-    def show_room_lobby(self, full_name):
+    def show_room_lobby(self, full_name, username=None):
         """Show room lobby where student can join a test room"""
+        # Store username for cache file
+        if username:
+            self.username = username
         # Clear parent
         for widget in self.parent.winfo_children():
             widget.destroy()
@@ -400,12 +404,15 @@ class StudentWindow:
             hover_color="darkgreen"
         ).pack(pady=20)
     
-    def show_test_screen(self, questions, duration, room_id=None, cached_data=None, server_timestamp=None):
+    def show_test_screen(self, questions, duration, room_id=None, cached_data=None, server_timestamp=None, username=None):
         """Show test screen with questions"""
         self.questions = questions
         self.test_duration = duration
         self.room_id = room_id
         self.server_timestamp = server_timestamp  # Store server timestamp
+        # Store username for cache file
+        if username:
+            self.username = username
         
         # Check if resuming from cache
         if cached_data:
@@ -776,7 +783,9 @@ class StudentWindow:
         cache_dir = 'cache'
         os.makedirs(cache_dir, exist_ok=True)
         
-        cache_file = os.path.join(cache_dir, f'test_{self.room_id}.json')
+        # Use username + room_id to avoid conflicts between users
+        username_safe = self.username.replace(' ', '_') if self.username else 'unknown'
+        cache_file = os.path.join(cache_dir, f'test_{username_safe}_{self.room_id}.json')
         
         with open(cache_file, 'w') as f:
             json.dump(cache_data, f, indent=2)
@@ -790,7 +799,9 @@ class StudentWindow:
         
         import os
         
-        cache_file = os.path.join('cache', f'test_{self.room_id}.json')
+        # Use username + room_id (same as save_to_cache)
+        username_safe = self.username.replace(' ', '_') if self.username else 'unknown'
+        cache_file = os.path.join('cache', f'test_{username_safe}_{self.room_id}.json')
         
         try:
             if os.path.exists(cache_file):

@@ -180,7 +180,7 @@ class TestClientApp(ctk.CTk):
             # Create handler first
             self.student_handler = StudentHandler(self.conn, {
                 'show_ready': lambda fn, nq, d: self.student_window.show_ready_screen(fn, nq, d),
-                'show_test': lambda q, d, r=None, c=None, server_timestamp=None: self.student_window.show_test_screen(q, d, r, c, server_timestamp=server_timestamp),
+                'show_test': lambda q, d, r=None, c=None, server_timestamp=None: self.student_window.show_test_screen(q, d, r, c, server_timestamp=server_timestamp, username=self.current_user),
                 'show_result': lambda r: self.student_window.show_result_screen(r, full_name)
             })
             
@@ -199,7 +199,7 @@ class TestClientApp(ctk.CTk):
             })
             
             # Show room lobby
-            self.student_window.show_room_lobby(full_name)
+            self.student_window.show_room_lobby(full_name, username=self.current_user)
             
             # Load rooms initially
             self.handle_refresh_student_rooms()
@@ -356,7 +356,9 @@ class TestClientApp(ctk.CTk):
             # Check for cached progress first
             import os
             import json
-            cache_file = f'cache/test_{room_id}.json'
+            # Use username + room_id to avoid conflicts between users
+            username_safe = self.current_user.replace(' ', '_') if self.current_user else 'unknown'
+            cache_file = f'cache/test_{username_safe}_{room_id}.json'
             cached_data = None
             
             if os.path.exists(cache_file):

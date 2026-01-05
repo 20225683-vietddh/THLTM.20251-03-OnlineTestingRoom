@@ -226,34 +226,34 @@ class TeacherWindow:
         self.rooms_text.configure(state="normal")
         self.rooms_text.delete("1.0", "end")
         
-        # Header with better formatting
+        # Header with fixed-width formatting (no emoji for perfect alignment)
         self.rooms_text.insert("end",
-            f"{'Room Name':<25} {'Code':<8} {'Q#':<4} {'Mins':<5} {'Status':<10} {'👥':<4} {'⏰ Timeline':<40}\n"
+            f"{'Room Name':<25} {'Code':<8} {'Q#':<4} {'Mins':<6} {'Status':<10} {'Students':<10} {'Timeline':<50}\n"
         )
-        self.rooms_text.insert("end", "=" * 110 + "\n")
+        self.rooms_text.insert("end", "=" * 120 + "\n")
         
         # Rooms data
         if self.rooms_data:
             for room in self.rooms_data:
-                # Status with icon
+                # Status without emoji for proper alignment
                 if room['status'] == 'waiting':
-                    status_display = "⏳ Waiting"
+                    status_display = "Waiting"
                 elif room['status'] == 'active':
-                    status_display = "▶️ Active"
+                    status_display = "Active"
                 else:
-                    status_display = "✅ Ended"
+                    status_display = "Ended"
                 
                 # Format timestamps
                 timeline = self._format_timeline(room)
-                
+ 
                 self.rooms_text.insert("end",
                     f"{room['room_name']:<25} "
                     f"{room['room_code']:<8} "
                     f"{room['num_questions']:<4} "
-                    f"{room['duration_minutes']:<5} "
+                    f"{room['duration_minutes']:<6} "
                     f"{status_display:<10} "
-                    f"{room.get('participant_count', 0):<4} "
-                    f"{timeline:<40}\n"
+                    f"{room.get('participant_count', 0):<10} "
+                    f"{timeline}\n"
                 )
         else:
             self.rooms_text.insert("end", "\nNo rooms created yet. Create your first room above!\n")
