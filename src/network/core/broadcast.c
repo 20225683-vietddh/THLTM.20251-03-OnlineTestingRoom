@@ -74,11 +74,11 @@ int broadcast_register(int socket, int room_id) {
     pthread_mutex_lock(&g_broadcast_manager->lock);
 #endif
     
-    // Check if socket already registered - update room if found
+    // Check if (socket + room_id) already registered
     broadcast_client_t* current = g_broadcast_manager->clients;
     while (current) {
-        if (current->socket == socket) {
-            current->room_id = room_id;
+        if (current->socket == socket && current->room_id == room_id) {
+            // Already registered for this room, OK
 #ifdef _WIN32
             LeaveCriticalSection(&g_broadcast_manager->lock);
 #else
